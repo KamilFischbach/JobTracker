@@ -9,13 +9,8 @@ const fields = {
     .optional(),
   salaryMin: z.number().positive().nullable().optional(),
   salaryMax: z.number().positive().nullable().optional(),
-  currency: z.string().trim().length(3).nullable(),
+  currency: z.string().trim().length(3).optional(),
   appliedDate: z.iso
-    .date()
-    .transform((date) => new Date(`${date}T00:00:00.000Z`))
-    .nullable()
-    .optional(),
-  followUpDate: z.iso
     .date()
     .transform((date) => new Date(`${date}T00:00:00.000Z`))
     .nullable()
@@ -48,3 +43,13 @@ export const updateApplicationSchema = z
     path: ['salaryMax'],
     message: 'Maximum salary must be at least the minimum salary',
   });
+
+export const deleteApplicationsSchema = z.object({
+  ids: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .max(100)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: 'Application IDs must be unique.',
+    }),
+});
