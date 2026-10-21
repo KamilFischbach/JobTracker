@@ -6,7 +6,7 @@ A personal job-application tracker for organizing a job search in one place. App
 
 ## Demo
 
-**GitHub Pages demo:** `https://kamilfischbach.github.io/JobTracker/`
+**GitHub Pages demo:** Visit [demo](https://kamilfischbach.github.io/JobTracker/) to play with the app.
 
 ![Job application demo](demo.png)
 
