@@ -6,9 +6,9 @@ A personal job-application tracker for organizing a job search in one place. App
 
 ## Demo
 
-**GitHub Pages demo:** `placeholder`
+**GitHub Pages demo:** `https://kamilfischbach.github.io/JobTracker/`
 
-![Job application illustration placeholder](client/src/assets/Job%20Application.png)
+![Job application demo](demo.png)
 
 The public demo uses fictional sample data stored in the visitor's browser. It does not connect to the personal PostgreSQL database.
 
@@ -90,7 +90,3 @@ pnpm start-frontend
 ```
 
 Demo changes are saved in the current browser's localStorage.
-
-## AI Assistance
-
-Developed with help from agentic AI for implementation support, debugging, and iteration. Technical decisions and final changes were reviewed by me.
