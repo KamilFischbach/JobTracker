@@ -395,7 +395,9 @@ export function ApplicationsPage() {
       <header className='flex flex-wrap items-center justify-between gap-4 border-b pb-5'>
         <div>
           <p className='text-sm text-muted-foreground'>Personal Job Tracker</p>
-          <h1 className='mt-1 text-3xl font-semibold'>Applications</h1>
+          <h1 className='mt-1 text-3xl font-semibold !text-black'>
+            Applications
+          </h1>
         </div>
         <ApplicationFormDialog />
       </header>

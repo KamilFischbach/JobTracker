@@ -14,7 +14,7 @@ import {
   GripVertical,
   MoreHorizontal,
 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   APPLICATION_STATUSES,
@@ -54,7 +54,8 @@ export function JobCard({
   onStatusChange: (id: string, status: ApplicationStatus) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const statusMenuRef = useRef<HTMLDetailsElement>(null);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
   const {
     attributes,
     listeners,
@@ -66,6 +67,36 @@ export function JobCard({
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
+
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+
+    const closeOnOutsideInteraction = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && !statusMenuRef.current?.contains(target)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setStatusMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideInteraction, true);
+    document.addEventListener('wheel', closeOnOutsideInteraction, true);
+    document.addEventListener('scroll', closeOnOutsideInteraction, true);
+    document.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        closeOnOutsideInteraction,
+        true,
+      );
+      document.removeEventListener('wheel', closeOnOutsideInteraction, true);
+      document.removeEventListener('scroll', closeOnOutsideInteraction, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [statusMenuOpen]);
 
   return (
     <Card
@@ -95,33 +126,44 @@ export function JobCard({
         </div>
         <div className='flex shrink-0 items-center gap-3'>
           {isMobile ? (
-            <details ref={statusMenuRef} className='relative'>
-              <summary
+            <div ref={statusMenuRef} className='relative'>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
                 aria-label='Change application status'
                 title='Change status'
-                className='flex size-8 cursor-pointer list-none items-center justify-center rounded-md border border-transparent hover:bg-muted [&::-webkit-details-marker]:hidden'
+                aria-haspopup='menu'
+                aria-expanded={statusMenuOpen}
+                onClick={() => setStatusMenuOpen((open) => !open)}
               >
                 <MoreHorizontal aria-hidden='true' className='size-4' />
-              </summary>
-              <div className='absolute right-0 top-full z-30 mt-1 min-w-44 rounded-md border bg-popover p-1 shadow-md'>
-                {APPLICATION_STATUSES.filter(
-                  (status) => status !== jobApplication.status,
-                ).map((status) => (
-                  <button
-                    key={status}
-                    type='button'
-                    role='menuitem'
-                    className='w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none'
-                    onClick={() => {
-                      onStatusChange(jobApplication.id, status);
-                      statusMenuRef.current?.removeAttribute('open');
-                    }}
-                  >
-                    Move to {APPLICATION_STATUS_META[status].label}
-                  </button>
-                ))}
-              </div>
-            </details>
+              </Button>
+              {statusMenuOpen && (
+                <div
+                  role='menu'
+                  aria-label={`Move ${jobApplication.companyName} application`}
+                  className='absolute right-0 top-full z-30 mt-1 min-w-44 rounded-md border bg-popover p-1 shadow-md'
+                >
+                  {APPLICATION_STATUSES.filter(
+                    (status) => status !== jobApplication.status,
+                  ).map((status) => (
+                    <button
+                      key={status}
+                      type='button'
+                      role='menuitem'
+                      className='w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none'
+                      onClick={() => {
+                        onStatusChange(jobApplication.id, status);
+                        setStatusMenuOpen(false);
+                      }}
+                    >
+                      Move to {APPLICATION_STATUS_META[status].label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <Button
               ref={setActivatorNodeRef}
