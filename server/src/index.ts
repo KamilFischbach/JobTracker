@@ -1,13 +1,10 @@
 import 'dotenv/config';
+import { createApp } from './app.js';
+import { prisma } from './prisma.js';
 
-import express from 'express';
-import applicationsRouter from './routes/applications.js';
-
-const app = express();
+const app = createApp(prisma);
 const port = Number(process.env.PORT ?? 3000);
 
-app.use(express.json());
-app.use('/applications', applicationsRouter);
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
 });
