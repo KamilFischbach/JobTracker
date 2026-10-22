@@ -41,6 +41,8 @@ The tests are split by scope so there are separate test for frontend and backend
 - **Frontend:** Vitest is used to perform unit testing of utility function such as search, filtering and sorting. Integration testing is conducted using Vitest, React Testing library and mocking with MSW to verify exisiting components and their interaction with services.
 - **Backend:** Unit testing is done using Vitest that checks Zod request schemas and validation rules. Integration testing done using Vitest, Supertest, pg and Testcontainer libraries. It ensures correctness of HTTP status codes, validation, persitance and CRUD operations.
 
+The test are run on push and on pull request to main: [Tests pipeline](https://github.com/kamilfischbach/JobTracker/actions/workflows/test.yml)
+
 Run individual suites from the repository root:
 
 ```powershell
@@ -90,11 +92,11 @@ pnpm --filter server exec prisma migrate dev --config prisma7.config.ts
 Start the API and frontend in separate terminals:
 
 ```powershell
-pnpm start-backend
+pnpm start:backend
 ```
 
 ```powershell
-pnpm start-frontend
+pnpm start:frontend
 ```
 
 Open `http://localhost:5173`.
@@ -105,7 +107,7 @@ In PowerShell, set the mock-mode flag and start the frontend:
 
 ```powershell
 $env:VITE_DEMO_MODE = 'true'
-pnpm start-frontend
+pnpm start:frontend
 ```
 
 Demo changes are saved in the current browser's localStorage.

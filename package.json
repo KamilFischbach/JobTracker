@@ -4,6 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "lint:frontend": "pnpm --filter client lint",
+    "lint": "pnpm lint:frontend",
+    "typecheck:frontend": "pnpm --filter client typecheck",
+    "typecheck:backend": "pnpm --filter server typecheck",
+    "typecheck": "pnpm typecheck:frontend && pnpm typecheck:backend",
     "test:frontend:unit": "pnpm --filter client test:unit",
     "test:frontend:integration": "pnpm --filter client test:integration",
     "test:frontend": "pnpm test:frontend:unit && pnpm test:frontend:integration",
@@ -11,8 +16,8 @@
     "test:backend:integration": "pnpm --filter server test:integration",
     "test:backend": "pnpm test:backend:unit && pnpm test:backend:integration",
     "test": "pnpm test:frontend && pnpm test:backend",
-    "start-backend": "echo \"Starting backend...\" && docker compose up -d && pnpm --filter server dev",
-    "start-frontend": "echo \"Starting backend...\" && pnpm --filter client dev"
+    "start:backend": "echo \"Starting backend...\" && docker compose up -d && pnpm --filter server dev",
+    "start:frontend": "echo \"Starting backend...\" && pnpm --filter client dev"
   },
   "keywords": [],
   "author": "",
