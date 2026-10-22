@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom';
 import { ApplicationDetailsPage } from './components/ApplicationDetailsPage';
 import { ApplicationsPage } from './components/ApplicationsPage';
+import { Footer } from './components/Footer';
 const AppRouter =
   import.meta.env.VITE_DEMO_MODE === 'true' ? HashRouter : BrowserRouter;
 
@@ -22,6 +23,7 @@ function App() {
         />
         <Route path='*' element={<Navigate to='/' replace />} />
       </Routes>
+      <Footer />
     </AppRouter>
   );
 }
