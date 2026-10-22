@@ -24,6 +24,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  filterAndSortApplications,
+  type ApplicationSort,
+} from '../lib/application-list';
+import {
   deleteApplications,
   getApplications,
   isDemoMode,
@@ -46,14 +50,6 @@ const pointerFirstCollisionDetection: CollisionDetection = (args) => {
     ? pointerCollisions
     : closestCorners(args);
 };
-
-function dateInputValue(date: Date | null) {
-  if (!date) return '';
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function StatusColumn({
   status,
@@ -125,9 +121,7 @@ export function ApplicationsPage() {
     null,
   );
   const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
-  const [sortBy, setSortBy] = useState<
-    'applied-newest' | 'applied-oldest' | 'company' | 'salary-high'
-  >('applied-newest');
+  const [sortBy, setSortBy] = useState<ApplicationSort>('applied-newest');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const {
     data: applications,
@@ -233,6 +227,11 @@ export function ApplicationsPage() {
           context.previousApplication,
         );
       }
+      if (isMobile && context?.previousApplication) {
+        setMobileStatusIndex(
+          APPLICATION_STATUSES.indexOf(context.previousApplication.status),
+        );
+      }
     },
     onSettled: async (_data, _error, { id }) => {
       await Promise.all([
@@ -277,37 +276,11 @@ export function ApplicationsPage() {
     },
   });
 
-  const searchNeedle = searchText.trim().toLocaleLowerCase();
-  const filteredApplications = (applications ?? []).filter((application) => {
-    const matchesKeyword =
-      !searchNeedle ||
-      [application.companyName, application.jobTitle, application.notes]
-        .filter(Boolean)
-        .some((value) => value!.toLocaleLowerCase().includes(searchNeedle));
-    const appliedDate = dateInputValue(application.appliedDate);
-    const matchesAfter =
-      !appliedAfter || (appliedDate && appliedDate >= appliedAfter);
-    const matchesBefore =
-      !appliedBefore || (appliedDate && appliedDate <= appliedBefore);
-
-    return matchesKeyword && matchesAfter && matchesBefore;
-  });
-
-  const visibleApplications = [...filteredApplications].sort((left, right) => {
-    if (sortBy === 'company') {
-      return left.companyName.localeCompare(right.companyName);
-    }
-    if (sortBy === 'salary-high') {
-      return (
-        Number(right.salaryMax ?? -Infinity) -
-        Number(left.salaryMax ?? -Infinity)
-      );
-    }
-    if (!left.appliedDate) return 1;
-    if (!right.appliedDate) return -1;
-    const dateDifference =
-      left.appliedDate.getTime() - right.appliedDate.getTime();
-    return sortBy === 'applied-newest' ? -dateDifference : dateDifference;
+  const visibleApplications = filterAndSortApplications(applications ?? [], {
+    searchText,
+    appliedAfter,
+    appliedBefore,
+    sortBy,
   });
 
   const allVisibleSelected =
@@ -347,6 +320,9 @@ export function ApplicationsPage() {
 
   function changeApplicationStatus(id: string, status: ApplicationStatus) {
     statusMutation.reset();
+    if (isMobile) {
+      setMobileStatusIndex(APPLICATION_STATUSES.indexOf(status));
+    }
     statusMutation.mutate({ id, status });
   }
 
