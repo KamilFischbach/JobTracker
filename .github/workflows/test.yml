@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DATABASE_URL: "postgresql://placeholder:5432/db"
+
 jobs:
   lint-and-typecheck:
     name: Lint & Typecheck
@@ -32,8 +35,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        env:
-          DATABASE_URL: "postgresql://placeholder:5432/db"
         run: pnpm --filter server exec prisma generate --config prisma7.config.ts
 
       - name: Run ESLint
@@ -106,8 +107,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        env:
-          DATABASE_URL: "postgresql://placeholder:5432/db"
         run: pnpm --filter server exec prisma generate --config prisma7.config.ts
 
       - name: Run Backend Unit Tests
@@ -133,8 +132,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        env:
-          DATABASE_URL: "postgresql://placeholder:5432/db"
         run: pnpm --filter server exec prisma generate --config prisma7.config.ts
 
       - name: Run Backend Integration Tests
