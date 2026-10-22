@@ -109,6 +109,8 @@ export function KanbanBoard({
               type='button'
               variant='outline'
               size='icon'
+              title='Previous status column'
+              aria-label='Previous status column'
               disabled={mobileStatusIndex === 0}
               onClick={() =>
                 setMobileStatusIndex((curr) => Math.max(0, curr - 1))
@@ -129,6 +131,8 @@ export function KanbanBoard({
               type='button'
               variant='outline'
               size='icon'
+              title='Next status column'
+              aria-label='Next status column'
               disabled={mobileStatusIndex === APPLICATION_STATUSES.length - 1}
               onClick={() =>
                 setMobileStatusIndex((curr) =>
