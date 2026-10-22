@@ -63,7 +63,7 @@ export function ApplicationFormDialog() {
       </Button>
       <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle>Add application</DialogTitle>
+          <DialogTitle className='text-black!'>Add application</DialogTitle>
           <DialogDescription>
             Save a role and keep its follow-up details in one place.
           </DialogDescription>

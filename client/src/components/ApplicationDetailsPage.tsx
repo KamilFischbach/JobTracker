@@ -35,7 +35,9 @@ export function ApplicationDetailsPage() {
       <header className='flex flex-col items-start justify-between gap-4 border-b pb-5 sm:flex-row sm:items-center'>
         <div>
           <p className='text-sm text-muted-foreground'>Personal Job Tracker</p>
-          <h1 className='mt-1 text-2xl font-semibold'>Application details</h1>
+          <h1 className='mt-1 text-2xl font-semibold text-black!'>
+            Application details
+          </h1>
         </div>
         <Button
           variant='outline'
