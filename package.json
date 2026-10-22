@@ -4,6 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "lint:frontend": "pnpm --filter client lint",
+    "lint:backend": "pnpm --filter server lint",
+    "lint": "pnpm lint:frontend && pnpm lint:backend",
+    "typecheck:frontend": "pnpm --filter client typecheck",
+    "typecheck:backend": "pnpm --filter server typecheck",
+    "typecheck": "pnpm typecheck:frontend && pnpm typecheck:backend",
     "test:frontend:unit": "pnpm --filter client test:unit",
     "test:frontend:integration": "pnpm --filter client test:integration",
     "test:frontend": "pnpm test:frontend:unit && pnpm test:frontend:integration",

@@ -1,5 +1,7 @@
 # Job Tracker
 
+[![CI / Test Suite](https://github.com/kamilfischbach/JobTracker/actions/workflows/test.yml/badge.svg)](https://github.com/kamilfischbach/JobTracker/actions/workflows/test.yml)
+
 A personal job-application tracker for organizing a job search in one place. Applications are grouped by status on a Kanban board. You can add and delete applications, search and filter them, sort the list, and drag applications between status columns.
 
 ## Demo
