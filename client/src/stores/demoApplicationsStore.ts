@@ -7,7 +7,7 @@ export type CreateApplicationInput = {
   companyName: string;
   jobTitle: string;
   jobUrl?: string;
-  status?: string;
+  status?: ApplicationStatus;
   salaryMin?: number;
   salaryMax?: number;
   appliedDate?: string;
@@ -218,7 +218,7 @@ export const useDemoApplicationsStore = create<DemoApplicationsStore>()(
           companyName: input.companyName,
           jobTitle: input.jobTitle,
           jobUrl: input.jobUrl ?? null,
-          status: 'SAVED',
+          status: input.status ?? 'SAVED',
           salaryMin: input.salaryMin ?? null,
           salaryMax: input.salaryMax ?? null,
           currency: 'PLN',
