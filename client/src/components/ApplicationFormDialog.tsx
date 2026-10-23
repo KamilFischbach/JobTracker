@@ -43,6 +43,7 @@ export function ApplicationFormDialog() {
       companyName,
       jobTitle,
       ...(jobUrl ? { jobUrl } : {}),
+      status: appliedDate ? 'APPLIED' : 'SAVED',
       ...(salaryMinValue ? { salaryMin: Number(salaryMinValue) } : {}),
       ...(salaryMaxValue ? { salaryMax: Number(salaryMaxValue) } : {}),
       ...(appliedDate ? { appliedDate } : {}),

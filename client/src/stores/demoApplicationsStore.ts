@@ -7,6 +7,7 @@ export type CreateApplicationInput = {
   companyName: string;
   jobTitle: string;
   jobUrl?: string;
+  status?: string;
   salaryMin?: number;
   salaryMax?: number;
   appliedDate?: string;
