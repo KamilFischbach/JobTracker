@@ -206,7 +206,97 @@ const initialApplications: JobApplicationType[] = [
     appliedDate: new Date('2026-09-04T00:00:00'),
     notes: 'Fictional closed application.',
   },
+  // Extra Saved and Applied samples, so those columns show "Show more".
+  {
+    id: 'demo-application-16',
+    companyName: 'Northwind Health',
+    jobTitle: 'Frontend Developer',
+    jobUrl: 'https://example.com/jobs/northwind-frontend',
+    status: 'SAVED',
+    salaryMin: 12000,
+    salaryMax: 15000,
+    currency: 'PLN',
+    appliedDate: null,
+    notes: 'Interesting product; check the tech stack first.',
+  },
+  {
+    id: 'demo-application-17',
+    companyName: 'Sunbeam Labs',
+    jobTitle: 'React Engineer',
+    jobUrl: 'https://example.com/jobs/sunbeam-react',
+    status: 'SAVED',
+    salaryMin: 14000,
+    salaryMax: 18000,
+    currency: 'PLN',
+    appliedDate: null,
+    notes: 'Ask a contact about the team.',
+  },
+  {
+    id: 'demo-application-18',
+    companyName: 'Harbor Analytics',
+    jobTitle: 'UI Developer',
+    jobUrl: 'https://example.com/jobs/harbor-ui',
+    status: 'SAVED',
+    salaryMin: null,
+    salaryMax: null,
+    currency: 'PLN',
+    appliedDate: null,
+    notes: 'Salary not listed yet.',
+  },
+  {
+    id: 'demo-application-19',
+    companyName: 'Quartz Mobility',
+    jobTitle: 'Frontend Engineer',
+    jobUrl: 'https://example.com/jobs/quartz-frontend',
+    status: 'APPLIED',
+    salaryMin: 15000,
+    salaryMax: 19000,
+    currency: 'PLN',
+    appliedDate: new Date('2026-10-12T00:00:00'),
+    notes: 'Applied through the careers page.',
+  },
+  {
+    id: 'demo-application-20',
+    companyName: 'Pinecrest Software',
+    jobTitle: 'TypeScript Developer',
+    jobUrl: 'https://example.com/jobs/pinecrest-typescript',
+    status: 'APPLIED',
+    salaryMin: 13000,
+    salaryMax: 17000,
+    currency: 'PLN',
+    appliedDate: new Date('2026-10-10T00:00:00'),
+    notes: 'Waiting for a reply.',
+  },
+  {
+    id: 'demo-application-21',
+    companyName: 'Lumen Commerce',
+    jobTitle: 'Web Developer',
+    jobUrl: 'https://example.com/jobs/lumen-web',
+    status: 'APPLIED',
+    salaryMin: 11000,
+    salaryMax: 14000,
+    currency: 'PLN',
+    appliedDate: new Date('2026-10-09T00:00:00'),
+    notes: null,
+  },
+  {
+    id: 'demo-application-22',
+    companyName: 'Atlas Robotics',
+    jobTitle: 'Frontend Developer',
+    jobUrl: 'https://example.com/jobs/atlas-frontend',
+    status: 'APPLIED',
+    salaryMin: 16000,
+    salaryMax: 20000,
+    currency: 'PLN',
+    appliedDate: new Date('2026-10-03T00:00:00'),
+    notes: 'Follow up next week.',
+  },
 ];
+
+// Samples added in store version 3 (see migrate below).
+const ADDED_IN_VERSION_3 = new Set(
+  Array.from({ length: 7 }, (_, index) => `demo-application-${index + 16}`),
+);
 
 export const useDemoApplicationsStore = create<DemoApplicationsStore>()(
   persist(
@@ -248,14 +338,23 @@ export const useDemoApplicationsStore = create<DemoApplicationsStore>()(
     }),
     {
       name: 'job-tracker-demo-applications-v1',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState, version) => {
         const persisted = persistedState as
-          | { applications?: PersistedApplication[] }
-          | undefined;
-        if (version >= 2 || !persisted?.applications) return persistedState;
+          { applications?: PersistedApplication[] } | undefined;
+        if (!persisted?.applications) return persistedState;
 
+        // Before v2: add every missing sample. Before v3: add only the samples
+        // new in v3, so applications the visitor deleted stay deleted.
+        const toAdd =
+          version < 2
+            ? initialApplications
+            : version < 3
+              ? initialApplications.filter((application) =>
+                  ADDED_IN_VERSION_3.has(application.id),
+                )
+              : [];
         const existingIds = new Set(
           persisted.applications.map((application) => application.id),
         );
@@ -263,16 +362,13 @@ export const useDemoApplicationsStore = create<DemoApplicationsStore>()(
           ...persisted,
           applications: [
             ...persisted.applications,
-            ...initialApplications.filter(
-              (application) => !existingIds.has(application.id),
-            ),
+            ...toAdd.filter((application) => !existingIds.has(application.id)),
           ],
         };
       },
       merge: (persistedState, currentState) => {
         const persisted = persistedState as
-          | { applications?: PersistedApplication[] }
-          | undefined;
+          { applications?: PersistedApplication[] } | undefined;
 
         return {
           ...currentState,
