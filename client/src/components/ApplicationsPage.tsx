@@ -1,11 +1,17 @@
 import { Button } from '@/components/ui/button';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { SearchX } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { useApplicationFilters } from '../hooks/useApplicationFilters';
 import {
-  filterAndSortApplications,
-  type ApplicationSort,
-} from '../lib/application-list';
+  countByStatus,
+  EMPTY_FILTERS,
+  type ApplicationFilterState,
+} from '../lib/application-filters';
+import { filterAndSortApplications } from '../lib/application-list';
+import { COLUMN_CARD_LIMIT, getShownCards } from '../lib/column-cards';
 import {
   deleteApplications,
   getApplications,
@@ -17,26 +23,51 @@ import {
   type ApplicationStatus,
 } from '../types/ApplicationStatus';
 import type { JobApplicationType } from '../types/JobApplication';
+import { celebrate } from '../lib/celebrate';
 import { ApplicationFilters } from './ApplicationFilters';
-import { ApplicationFormDialog } from './ApplicationFormDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
+import { HeroHeader } from './HeroHeader';
 import { KanbanBoard } from './KanbanBoard';
 
 const applicationsQueryKey = ['applications'] as const;
 
+function NoResults({ onClearFilters }: { onClearFilters: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className='flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line-strong bg-glass px-6 py-14 text-center'
+    >
+      <span className='grid size-12 place-items-center rounded-full bg-accent-soft text-accent-ink'>
+        <SearchX aria-hidden='true' className='size-6' />
+      </span>
+      <p className='text-base font-semibold text-ink'>
+        No applications match your filters
+      </p>
+      <p className='max-w-sm text-sm text-ink-muted'>
+        Try a different search, widen the date range, or show more statuses.
+      </p>
+      <Button type='button' className='mt-2' onClick={onClearFilters}>
+        Clear filters
+      </Button>
+    </motion.div>
+  );
+}
+
 export function ApplicationsPage() {
   const queryClient = useQueryClient();
-  const [searchText, setSearchText] = useState('');
-  const [appliedAfter, setAppliedAfter] = useState('');
-  const [appliedBefore, setAppliedBefore] = useState('');
+  const { filters, updateFilters } = useApplicationFilters();
   const [isMobile, setIsMobile] = useState(
     () => window.matchMedia('(max-width: 639px)').matches,
   );
-  const [mobileStatusIndex, setMobileStatusIndex] = useState(0);
+  const [mobileStatus, setMobileStatus] = useState<ApplicationStatus>('SAVED');
+  // Columns opened with "Show more" (kept for this visit).
+  const [expandedStatuses, setExpandedStatuses] = useState<
+    Set<ApplicationStatus>
+  >(new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(
     null,
   );
-  const [sortBy, setSortBy] = useState<ApplicationSort>('applied-newest');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const {
@@ -98,9 +129,7 @@ export function ApplicationsPage() {
           context.previousApplication,
         );
       if (isMobile && context?.previousApplication) {
-        setMobileStatusIndex(
-          APPLICATION_STATUSES.indexOf(context.previousApplication.status),
-        );
+        setMobileStatus(context.previousApplication.status);
       }
     },
     onSettled: async (_data, _error, { id }) => {
@@ -142,35 +171,79 @@ export function ApplicationsPage() {
     },
   });
 
-  const visibleApplications = filterAndSortApplications(applications ?? [], {
-    searchText,
-    appliedAfter,
-    appliedBefore,
-    sortBy,
-  });
-  const allVisibleSelected =
-    visibleApplications.length > 0 &&
-    visibleApplications.every((app) => selectedIds.has(app.id));
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || typeof over.id !== 'string') return;
-      const directStatus = APPLICATION_STATUSES.find((s) => s === over.id);
-      const app = applications?.find((item) => item.id === String(active.id));
-      const overApp = applications?.find((item) => item.id === String(over.id));
-      const nextStatus = directStatus ?? overApp?.status;
-
-      if (!nextStatus || !app || app.status === nextStatus) return;
-      statusMutation.reset();
-      statusMutation.mutate({ id: app.id, status: nextStatus });
-    },
-    [applications, statusMutation],
+  // Search and dates first, so the status buttons can show how many cards each would add.
+  const matchingApplications = filterAndSortApplications(
+    applications ?? [],
+    filters,
   );
+  const statusCounts = countByStatus(matchingApplications);
+  const visibleApplications = matchingApplications.filter((app) =>
+    filters.statuses.includes(app.status),
+  );
+  // If the mobile column was hidden by the status filter, fall back to the first shown one.
+  const shownMobileStatus = filters.statuses.includes(mobileStatus)
+    ? mobileStatus
+    : filters.statuses[0];
+  // While searching or filtering by date, every match shows; nothing hides behind "Show more".
+  const showAllCards = Boolean(
+    filters.searchText.trim() || filters.appliedAfter || filters.appliedBefore,
+  );
+  // Cards the user can actually see: on mobile only one column is shown, and
+  // collapsed columns only show their first few cards.
+  const onScreenApplications = (
+    isMobile ? [shownMobileStatus] : filters.statuses
+  ).flatMap((status) =>
+    getShownCards(
+      visibleApplications.filter((app) => app.status === status),
+      { expanded: expandedStatuses.has(status), showAll: showAllCards },
+    ),
+  );
+  const allVisibleSelected =
+    onScreenApplications.length > 0 &&
+    onScreenApplications.every((app) => selectedIds.has(app.id));
+
+  function toggleExpanded(status: ApplicationStatus) {
+    setExpandedStatuses((current) => {
+      const next = new Set(current);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }
+
+  // If a moved card would land below the "Show more" cut-off, open that column
+  // so the card doesn't seem to disappear.
+  function revealMovedCard(id: string, status: ApplicationStatus) {
+    if (showAllCards) return;
+    const column = visibleApplications
+      .map((app) => (app.id === id ? { ...app, status } : app))
+      .filter((app) => app.status === status);
+    if (column.findIndex((app) => app.id === id) >= COLUMN_CARD_LIMIT) {
+      setExpandedStatuses((current) => new Set(current).add(status));
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || typeof over.id !== 'string') return;
+    const directStatus = APPLICATION_STATUSES.find((s) => s === over.id);
+    const app = applications?.find((item) => item.id === String(active.id));
+    const overApp = applications?.find((item) => item.id === String(over.id));
+    const nextStatus = directStatus ?? overApp?.status;
+
+    if (!nextStatus || !app || app.status === nextStatus) return;
+    statusMutation.reset();
+    if (nextStatus === 'OFFER') celebrate();
+    revealMovedCard(app.id, nextStatus);
+    statusMutation.mutate({ id: app.id, status: nextStatus });
+  }
 
   function changeApplicationStatus(id: string, status: ApplicationStatus) {
     statusMutation.reset();
-    if (isMobile) setMobileStatusIndex(APPLICATION_STATUSES.indexOf(status));
+    if (status === 'OFFER') celebrate();
+    revealMovedCard(id, status);
+    // Follow the card to its new column, unless that column is filtered out.
+    if (isMobile && filters.statuses.includes(status)) setMobileStatus(status);
     statusMutation.mutate({ id, status });
   }
 
@@ -178,34 +251,27 @@ export function ApplicationsPage() {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (allVisibleSelected)
-        visibleApplications.forEach((app) => next.delete(app.id));
-      else visibleApplications.forEach((app) => next.add(app.id));
+        onScreenApplications.forEach((app) => next.delete(app.id));
+      else onScreenApplications.forEach((app) => next.add(app.id));
       return next;
     });
   }
 
-  function clearFilters(update: () => void) {
-    update();
-    setSelectedIds(new Set());
+  function changeFilters(patch: Partial<ApplicationFilterState>) {
+    updateFilters(patch);
+    // Changing what is shown clears the selection, so hidden cards are never deleted by surprise.
+    if (Object.keys(patch).some((key) => key !== 'sortBy')) {
+      setSelectedIds(new Set());
+    }
+  }
+
+  function clearFilters() {
+    changeFilters(EMPTY_FILTERS);
   }
 
   return (
     <main className='flex min-h-svh w-full max-w-none flex-col gap-8 px-4 py-8 text-left sm:px-6 lg:px-8'>
-      <header className='flex flex-wrap items-center justify-between gap-4 border-b pb-5'>
-        <div>
-          <p className='text-sm text-muted-foreground'>Personal Job Tracker</p>
-          <h1 className='mt-1 text-3xl font-semibold text-black!'>
-            Applications
-          </h1>
-        </div>
-        <ApplicationFormDialog />
-      </header>
-
-      {isDemoMode && (
-        <p className='w-fit rounded-sm border bg-muted px-3 py-1 text-xs text-muted-foreground'>
-          Demo mode: sample data saved in this browser
-        </p>
-      )}
+      <HeroHeader applications={applications} isDemoMode={isDemoMode} />
 
       <DeleteConfirmationDialog
         isOpen={pendingDeleteIds !== null}
@@ -259,46 +325,50 @@ export function ApplicationsPage() {
       {!isPending && !isError && applications && (
         <>
           <ApplicationFilters
-            searchText={searchText}
-            appliedAfter={appliedAfter}
-            appliedBefore={appliedBefore}
-            sortBy={sortBy}
+            filters={filters}
+            statusCounts={statusCounts}
+            isMobile={isMobile}
             visibleCount={visibleApplications.length}
+            onScreenCount={onScreenApplications.length}
             totalCount={applications.length}
             allVisibleSelected={allVisibleSelected}
-            hasSelectedIds={selectedIds.size > 0}
+            selectedCount={selectedIds.size}
             isDeletePending={deleteMutation.isPending}
             deleteError={deleteMutation.error?.message}
-            onSearchChange={(v) => clearFilters(() => setSearchText(v))}
-            onAppliedAfterChange={(v) => clearFilters(() => setAppliedAfter(v))}
-            onAppliedBeforeChange={(v) =>
-              clearFilters(() => setAppliedBefore(v))
-            }
-            onSortByChange={setSortBy}
+            onFiltersChange={changeFilters}
+            onClearFilters={clearFilters}
             onToggleVisibleSelection={toggleVisibleSelection}
             onDeleteSelected={() => setPendingDeleteIds([...selectedIds])}
           />
-          <KanbanBoard
-            applications={applications}
-            visibleApplications={visibleApplications}
-            selectedIds={selectedIds}
-            isMobile={isMobile}
-            mobileStatusIndex={mobileStatusIndex}
-            setMobileStatusIndex={setMobileStatusIndex}
-            onDragEnd={handleDragEnd}
-            onStatusChange={changeApplicationStatus}
-            onApplicationSelection={(id, selected) =>
-              setSelectedIds((curr) => {
-                const next = new Set(curr);
-                if (selected) {
-                  next.add(id);
-                } else {
-                  next.delete(id);
-                }
-                return next;
-              })
-            }
-          />
+          {applications.length > 0 && visibleApplications.length === 0 ? (
+            <NoResults onClearFilters={clearFilters} />
+          ) : (
+            <KanbanBoard
+              applications={applications}
+              visibleApplications={visibleApplications}
+              selectedIds={selectedIds}
+              isMobile={isMobile}
+              statuses={filters.statuses}
+              mobileStatus={shownMobileStatus}
+              onMobileStatusChange={setMobileStatus}
+              expandedStatuses={expandedStatuses}
+              showAllCards={showAllCards}
+              onToggleExpanded={toggleExpanded}
+              onDragEnd={handleDragEnd}
+              onStatusChange={changeApplicationStatus}
+              onApplicationSelection={(id, selected) =>
+                setSelectedIds((curr) => {
+                  const next = new Set(curr);
+                  if (selected) {
+                    next.add(id);
+                  } else {
+                    next.delete(id);
+                  }
+                  return next;
+                })
+              }
+            />
+          )}
         </>
       )}
     </main>

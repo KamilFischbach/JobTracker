@@ -13,7 +13,7 @@ export type ApplicationListFilters = {
   sortBy: ApplicationSort;
 };
 
-function dateInputValue(date: Date | null) {
+export function dateInputValue(date: Date | null) {
   if (!date) return '';
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
