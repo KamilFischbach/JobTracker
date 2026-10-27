@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getApplication } from '../services/applications';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 
@@ -24,6 +24,11 @@ function formatSalary(amount: number | string | null, currency: string) {
 export function ApplicationDetailsPage() {
   const { applicationId } = useParams<{ applicationId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Coming from the board: go back in history so its filters (kept in the URL) return.
+  const cameFromBoard = Boolean(
+    (location.state as { fromBoard?: boolean } | null)?.fromBoard,
+  );
   const query = useQuery({
     queryKey: ['applications', applicationId],
     queryFn: () => getApplication(applicationId!),
@@ -34,15 +39,16 @@ export function ApplicationDetailsPage() {
     <main className='mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-6 px-4 py-8 sm:px-6'>
       <header className='flex flex-col items-start justify-between gap-4 border-b pb-5 sm:flex-row sm:items-center'>
         <div>
-          <p className='text-sm text-muted-foreground'>Personal Job Tracker</p>
-          <h1 className='mt-1 text-2xl font-semibold text-black!'>
+          <h1 className='mt-1 text-2xl font-semibold text-ink!'>
             Application details
           </h1>
         </div>
         <Button
           variant='outline'
           className='w-full sm:w-auto'
-          onClick={() => navigate('/applications')}
+          onClick={() =>
+            cameFromBoard ? navigate(-1) : navigate('/applications')
+          }
         >
           Back to applications
         </Button>

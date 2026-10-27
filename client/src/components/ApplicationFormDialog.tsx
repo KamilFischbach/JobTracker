@@ -45,9 +45,7 @@ export function ApplicationFormDialog() {
       salaryMaxValue &&
       Number(salaryMinValue) > Number(salaryMaxValue)
     ) {
-      setValidationError(
-        'Maximum salary must be at least the minimum salary.',
-      );
+      setValidationError('Maximum salary must be at least the minimum salary.');
       return;
     }
     setValidationError(null);
@@ -74,15 +72,19 @@ export function ApplicationFormDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Button type='button' onClick={() => setOpen(true)}>
+      <Button
+        type='button'
+        className='bg-linear-to-r from-indigo-600 via-violet-600 to-fuchsia-600 px-4 text-white shadow-lg shadow-violet-500/30 transition-all hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 hover:shadow-xl hover:shadow-violet-500/40 motion-safe:hover:-translate-y-0.5'
+        onClick={() => setOpen(true)}
+      >
         <Plus aria-hidden='true' />
         Add application
       </Button>
       <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle className='text-black!'>Add application</DialogTitle>
+          <DialogTitle className='text-ink!'>Add application</DialogTitle>
           <DialogDescription>
-            Save a role and keep its follow-up details in one place.
+            Save a role and keep its details in one place.
           </DialogDescription>
         </DialogHeader>
 

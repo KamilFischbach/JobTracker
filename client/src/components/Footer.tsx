@@ -1,49 +1,106 @@
-import { Separator } from '@/components/ui/separator';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, Mail } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+// Brand logos are no longer shipped with lucide, so they are inlined here.
+function GitHubIcon() {
+  return (
+    <svg viewBox='0 0 24 24' aria-hidden='true' className='size-4 fill-current'>
+      <path d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' />
+    </svg>
+  );
+}
+
+function LinkedInIcon() {
+  return (
+    <svg viewBox='0 0 24 24' aria-hidden='true' className='size-4 fill-current'>
+      <path d='M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.125 2.062 2.062 0 0 1 0 4.125zM7.119 20.452H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z' />
+    </svg>
+  );
+}
+
+function FooterLink({
+  href,
+  icon,
+  children,
+}: {
+  href: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  const isExternal = href.startsWith('http');
+  return (
+    <a
+      href={href}
+      {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+      className='group inline-flex items-center gap-2 rounded-full border border-line bg-glass px-4 py-2 text-ink transition-all hover:border-line-strong hover:bg-glass-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 motion-safe:hover:-translate-y-0.5'
+    >
+      {icon}
+      {children}
+      <ArrowUpRight
+        aria-hidden='true'
+        className='size-3.5 opacity-50 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100'
+      />
+    </a>
+  );
+}
 
 export function Footer() {
   return (
-    <footer className='w-full bg-[#f4f4f5] py-16 px-6 text-sm'>
-      <div className='mx-auto max-w-5xl'>
-        <h2 className='mb-12 text-black! text-center text-6xl font-bold tracking-tight md:text-8xl'>
+    <footer className='relative isolate w-full overflow-hidden px-6 pt-20 pb-8 text-sm text-ink-muted'>
+      {/* Soft glow behind the name. The footer has no background of its own,
+          so it blends into the page in both themes. */}
+      <div
+        aria-hidden='true'
+        className='absolute top-12 left-1/2 -z-10 h-64 w-2xl max-w-full -translate-x-1/2 rounded-full bg-violet-300/30 blur-3xl dark:bg-violet-600/20'
+      />
+
+      <div className='mx-auto flex max-w-5xl flex-col items-center gap-6 text-center'>
+        <p className='text-xs font-semibold tracking-[0.25em] text-violet-700/80 uppercase dark:text-violet-300/80'>
+          Designed &amp; built by
+        </p>
+        <p className='bg-linear-to-r from-indigo-950 via-violet-800 to-fuchsia-700 bg-clip-text dark:from-white dark:via-indigo-200 dark:to-fuchsia-300 pb-2 text-5xl leading-[1.1] font-bold tracking-tight text-transparent md:text-7xl'>
           Kamil Fischbach
-        </h2>
+        </p>
+        <p className='max-w-md text-ink-muted'>
+          Job Tracker is built with React, TypeScript, Express, Prisma and
+          PostgreSQL.
+        </p>
 
-        <Separator className='mb-8 bg-zinc-200' />
+        <nav
+          aria-label='Contact'
+          className='mt-2 flex flex-wrap justify-center gap-3'
+        >
+          <FooterLink
+            href='mailto:fischbach.kamil@gmail.com'
+            icon={<Mail aria-hidden='true' className='size-4' />}
+          >
+            fischbach.kamil@gmail.com
+          </FooterLink>
+          <FooterLink
+            href='https://www.linkedin.com/in/kamil-fischbach-288175253/'
+            icon={<LinkedInIcon />}
+          >
+            LinkedIn
+          </FooterLink>
+          <FooterLink
+            href='https://github.com/KamilFischbach/JobTracker'
+            icon={<GitHubIcon />}
+          >
+            GitHub
+          </FooterLink>
+        </nav>
+      </div>
 
-        <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
-          <div className='flex flex-col items-center gap-4'>
-            <span className='text-xs font-semibold uppercase tracking-wide text-black'>
-              Email
-            </span>
-            <a
-              href='mailto:example@shadcnblocks.com'
-              className='flex items-center gap-1 text-zinc-500 hover:text-zinc-900 transition-colors'
-            >
-              fischbach.kamil@gmail.com <ArrowUpRight className='h-3 w-3' />
-            </a>
-          </div>
-
-          <div className='flex flex-col items-center gap-4'>
-            <span className='text-xs font-semibold uppercase tracking-wide text-black'>
-              Find me
-            </span>
-            <div className='flex gap-4 text-zinc-500'>
-              <a
-                href='https://www.linkedin.com/in/kamil-fischbach-288175253/'
-                className='hover:text-zinc-900 transition-colors'
-              >
-                LinkedIn
-              </a>
-              <a
-                href='https://github.com/KamilFischbach/JobTracker'
-                className='hover:text-zinc-900 transition-colors'
-              >
-                GitHub
-              </a>
-            </div>
-          </div>
-        </div>
+      <div className='mx-auto mt-16 flex max-w-5xl flex-wrap items-center justify-between gap-4 border-t border-line pt-6 text-xs text-ink-subtle'>
+        <p>© {new Date().getFullYear()} Kamil Fischbach</p>
+        <button
+          type='button'
+          className='inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-muted transition-colors hover:bg-line hover:text-ink focus-visible:outline-2 focus-visible:outline-violet-400'
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+          <ArrowUp aria-hidden='true' className='size-3.5' />
+          Back to top
+        </button>
       </div>
     </footer>
   );
