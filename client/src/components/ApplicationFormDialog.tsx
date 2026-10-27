@@ -16,6 +16,7 @@ import { createApplication } from '../services/applications';
 
 export function ApplicationFormDialog() {
   const [open, setOpen] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const queryClient = useQueryClient();
 
@@ -39,6 +40,18 @@ export function ApplicationFormDialog() {
     const appliedDate = String(formData.get('appliedDate') ?? '');
     const notes = String(formData.get('notes') ?? '').trim();
 
+    if (
+      salaryMinValue &&
+      salaryMaxValue &&
+      Number(salaryMinValue) > Number(salaryMaxValue)
+    ) {
+      setValidationError(
+        'Maximum salary must be at least the minimum salary.',
+      );
+      return;
+    }
+    setValidationError(null);
+
     createMutation.mutate({
       companyName,
       jobTitle,
@@ -53,7 +66,10 @@ export function ApplicationFormDialog() {
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
-    if (!nextOpen) createMutation.reset();
+    if (!nextOpen) {
+      createMutation.reset();
+      setValidationError(null);
+    }
   }
 
   return (
@@ -130,9 +146,9 @@ export function ApplicationFormDialog() {
             </div>
           </div>
 
-          {createMutation.isError && (
+          {(validationError ?? createMutation.isError) && (
             <p role='alert' className='text-sm text-destructive'>
-              {createMutation.error.message}
+              {validationError ?? createMutation.error?.message}
             </p>
           )}
 

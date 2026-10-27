@@ -17,6 +17,14 @@ function omitUndefined<T extends object>(value: T): OmitUndefined<T> {
   ) as OmitUndefined<T>;
 }
 
+// Builds a 400 body with a readable message (shown by the client) plus the full issue list.
+function validationError(issues: { message: string }[]) {
+  return {
+    message: issues[0]?.message ?? 'Invalid input.',
+    errors: issues,
+  };
+}
+
 export function createApplicationsRouter(prisma: PrismaClient): Router {
   const router: Router = Router();
 
@@ -43,7 +51,7 @@ export function createApplicationsRouter(prisma: PrismaClient): Router {
   router.post('/', async (request, response) => {
     const parsed = createApplicationSchema.safeParse(request.body);
     if (!parsed.success) {
-      return response.status(400).send('Incorrect input format!');
+      return response.status(400).json(validationError(parsed.error.issues));
     }
     const result = await prisma.jobApplication.create({
       data: omitUndefined(parsed.data),
@@ -55,7 +63,7 @@ export function createApplicationsRouter(prisma: PrismaClient): Router {
   router.patch('/:id', async (request, response) => {
     const parsed = updateApplicationSchema.safeParse(request.body);
     if (!parsed.success) {
-      return response.status(400).json({ errors: parsed.error.issues });
+      return response.status(400).json(validationError(parsed.error.issues));
     }
 
     const existingApplication = await prisma.jobApplication.findUnique({

@@ -93,6 +93,20 @@ describe('applications routes (PostgreSQL integration)', () => {
       .send({ companyName: ' ', jobTitle: 'Engineer' })
       .expect(400);
 
+    const invertedRange = await request(app)
+      .post('/applications')
+      .send({
+        companyName: 'Range Test',
+        jobTitle: 'Engineer',
+        salaryMin: 18000,
+        salaryMax: 15000,
+      })
+      .expect(400);
+    expect(invertedRange.body.message).toBe(
+      'Maximum salary must be at least the minimum salary.',
+    );
+    expect(await prisma.jobApplication.count()).toBe(0);
+
     const created = await prisma.jobApplication.create({
       data: {
         companyName: 'Range Test',
