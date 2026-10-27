@@ -30,7 +30,7 @@ export function DeleteConfirmationDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className='text-black!'>
+          <DialogTitle className='text-ink!'>
             Delete {count} {count === 1 ? 'application' : 'applications'}?
           </DialogTitle>
           <DialogDescription>
