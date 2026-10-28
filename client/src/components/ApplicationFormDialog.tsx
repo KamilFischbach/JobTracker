@@ -14,6 +14,13 @@ import { Plus } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { createApplication } from '../services/applications';
 
+function todayInputValue() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export function ApplicationFormDialog() {
   const [open, setOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -134,7 +141,12 @@ export function ApplicationFormDialog() {
 
             <div className='grid gap-2 sm:col-span-2'>
               <Label htmlFor='appliedDate'>Applied date</Label>
-              <Input id='appliedDate' name='appliedDate' type='date' />
+              <Input
+                id='appliedDate'
+                name='appliedDate'
+                type='date'
+                defaultValue={todayInputValue()}
+              />
             </div>
 
             <div className='grid gap-2 sm:col-span-2'>
