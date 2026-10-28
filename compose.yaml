@@ -16,5 +16,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # Optional local AI for "Fill with AI". Skip it if Ollama is installed on
+  # the machine already. Start with: docker compose --profile ai up -d
+  # then pull the model: docker compose exec ollama ollama pull qwen2.5:7b
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ['ai']
+    restart: unless-stopped
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama_models:/root/.ollama
+    # Uncomment to use an NVIDIA GPU (needs the NVIDIA Container Toolkit).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 volumes:
   postgres_data:
+  ollama_models:
