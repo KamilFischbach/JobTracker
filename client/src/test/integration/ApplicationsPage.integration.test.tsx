@@ -7,12 +7,14 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationsPage } from '../../components/ApplicationsPage';
 import type { JobApplicationResponse } from '../../types/JobApplication';
 import {
   applications as mockApplications,
+  server,
   setMockApplications,
 } from '../mock-api';
 
@@ -112,6 +114,111 @@ describe('ApplicationsPage API integration', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
+  });
+
+  it('fills the add form from an offer link with AI and saves it', async () => {
+    const requests: unknown[] = [];
+    server.use(
+      http.post('/api/ai/parse-offer', async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({
+          companyName: 'Box Inc.',
+          jobTitle: 'Fullstack Engineer',
+          jobUrl: 'https://jobs.example.com/box',
+          salaryMin: 7000,
+          salaryMax: 9000,
+          currency: 'EUR',
+          notes: 'Tech: React, Node.js',
+          warning: null,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /add application/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(
+      within(dialog).getByLabelText(/fill from job offer link/i),
+      'https://jobs.example.com/box{Enter}',
+    );
+
+    expect(
+      await within(dialog).findByText(/form filled from the offer/i),
+    ).toBeInTheDocument();
+    expect(requests).toEqual([{ url: 'https://jobs.example.com/box' }]);
+    expect(within(dialog).getByLabelText('Company')).toHaveValue('Box Inc.');
+    expect(within(dialog).getByLabelText('Job title')).toHaveValue(
+      'Fullstack Engineer',
+    );
+    expect(within(dialog).getByLabelText('Minimum salary (EUR)')).toHaveValue(
+      7000,
+    );
+    expect(within(dialog).getByLabelText('Notes')).toHaveValue(
+      'Tech: React, Node.js',
+    );
+
+    await user.click(
+      within(dialog).getByRole('button', { name: /save application/i }),
+    );
+
+    expect(await screen.findByText('Box Inc.')).toBeInTheDocument();
+    expect(mockApplications[0]).toMatchObject({
+      companyName: 'Box Inc.',
+      currency: 'EUR',
+      jobUrl: 'https://jobs.example.com/box',
+    });
+  });
+
+  it('asks for the offer text when the site blocks the download', async () => {
+    const requests: { url: string; text?: string }[] = [];
+    server.use(
+      http.post('/api/ai/parse-offer', async ({ request }) => {
+        const body = (await request.json()) as { url: string; text?: string };
+        requests.push(body);
+        if (!body.text) {
+          return HttpResponse.json(
+            { code: 'FETCH_FAILED', message: 'The website refused the request (HTTP 403).' },
+            { status: 422 },
+          );
+        }
+        return HttpResponse.json({
+          companyName: 'Cedar Cloud',
+          jobTitle: 'AI Engineer',
+          jobUrl: body.url,
+          salaryMin: null,
+          salaryMax: null,
+          currency: null,
+          notes: null,
+          warning: null,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /add application/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(
+      within(dialog).getByLabelText(/fill from job offer link/i),
+      'https://linkedin.com/jobs/1',
+    );
+    await user.click(within(dialog).getByRole('button', { name: /fill with ai/i }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('HTTP 403');
+    await user.type(
+      within(dialog).getByLabelText(/paste the offer text/i),
+      'AI Engineer at Cedar Cloud',
+    );
+    await user.click(within(dialog).getByRole('button', { name: /fill with ai/i }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Company')).toHaveValue('Cedar Cloud'),
+    );
+    expect(requests[1]).toEqual({
+      url: 'https://linkedin.com/jobs/1',
+      text: 'AI Engineer at Cedar Cloud',
+    });
   });
 
   it('shows the API error state instead of treating a failed response as empty data', async () => {

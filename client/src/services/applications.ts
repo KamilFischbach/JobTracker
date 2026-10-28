@@ -108,6 +108,51 @@ export async function updateApplicationStatus({
   }
 }
 
+export type OfferDraft = {
+  companyName: string | null;
+  jobTitle: string | null;
+  jobUrl: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  currency: string | null;
+  notes: string | null;
+  warning: string | null;
+};
+
+export class OfferImportError extends Error {
+  readonly code: string | null;
+
+  constructor(message: string, code: string | null) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// Asks the backend AI to read a job offer (from the link, or from pasted text).
+export async function parseOffer(input: {
+  url: string;
+  text?: string;
+}): Promise<OfferDraft> {
+  const response = await fetch('/api/ai/parse-offer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+      code?: string;
+    };
+    throw new OfferImportError(
+      body.message ?? `Could not read the offer (${response.status}).`,
+      body.code ?? null,
+    );
+  }
+
+  return response.json();
+}
+
 export async function deleteApplications(ids: string[]): Promise<void> {
   if (isDemoMode) {
     useDemoApplicationsStore.getState().deleteApplications(ids);

@@ -10,6 +10,7 @@ export type CreateApplicationInput = {
   status?: ApplicationStatus;
   salaryMin?: number;
   salaryMax?: number;
+  currency?: string;
   appliedDate?: string;
   notes?: string;
 };
@@ -311,7 +312,7 @@ export const useDemoApplicationsStore = create<DemoApplicationsStore>()(
           status: input.status ?? 'SAVED',
           salaryMin: input.salaryMin ?? null,
           salaryMax: input.salaryMax ?? null,
-          currency: 'PLN',
+          currency: input.currency ?? 'PLN',
           appliedDate: input.appliedDate
             ? new Date(`${input.appliedDate}T00:00:00`)
             : null,

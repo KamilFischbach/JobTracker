@@ -29,7 +29,7 @@ export const server = setupServer(
       status: 'SAVED',
       salaryMin: input.salaryMin ?? null,
       salaryMax: input.salaryMax ?? null,
-      currency: 'PLN',
+      currency: input.currency ?? 'PLN',
       appliedDate: input.appliedDate ?? null,
       notes: input.notes ?? null,
     };

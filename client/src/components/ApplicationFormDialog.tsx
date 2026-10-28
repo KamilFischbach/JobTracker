@@ -12,7 +12,36 @@ import { Label } from '@/components/ui/label';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
-import { createApplication } from '../services/applications';
+import {
+  createApplication,
+  isDemoMode,
+  type OfferDraft,
+} from '../services/applications';
+import { OfferImport } from './OfferImport';
+
+const DEFAULT_CURRENCY = 'PLN';
+
+// The form is uncontrolled, so imported values are written into its fields.
+function fillForm(form: HTMLFormElement, draft: OfferDraft) {
+  const values: Record<string, string | number | null> = {
+    companyName: draft.companyName,
+    jobTitle: draft.jobTitle,
+    jobUrl: draft.jobUrl,
+    salaryMin: draft.salaryMin,
+    salaryMax: draft.salaryMax,
+    notes: draft.notes,
+  };
+
+  for (const [name, value] of Object.entries(values)) {
+    const field = form.elements.namedItem(name);
+    if (
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement
+    ) {
+      field.value = value == null ? '' : String(value);
+    }
+  }
+}
 
 function todayInputValue() {
   const now = new Date();
@@ -24,6 +53,7 @@ function todayInputValue() {
 export function ApplicationFormDialog() {
   const [open, setOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const formRef = useRef<HTMLFormElement>(null);
   const queryClient = useQueryClient();
 
@@ -32,6 +62,7 @@ export function ApplicationFormDialog() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['applications'] });
       formRef.current?.reset();
+      setCurrency(DEFAULT_CURRENCY);
       setOpen(false);
     },
   });
@@ -64,6 +95,7 @@ export function ApplicationFormDialog() {
       status: appliedDate ? 'APPLIED' : 'SAVED',
       ...(salaryMinValue ? { salaryMin: Number(salaryMinValue) } : {}),
       ...(salaryMaxValue ? { salaryMax: Number(salaryMaxValue) } : {}),
+      ...(currency !== DEFAULT_CURRENCY ? { currency } : {}),
       ...(appliedDate ? { appliedDate } : {}),
       ...(notes ? { notes } : {}),
     });
@@ -74,7 +106,14 @@ export function ApplicationFormDialog() {
     if (!nextOpen) {
       createMutation.reset();
       setValidationError(null);
+      setCurrency(DEFAULT_CURRENCY);
     }
+  }
+
+  function handleImported(draft: OfferDraft) {
+    if (formRef.current) fillForm(formRef.current, draft);
+    setCurrency(draft.currency ?? DEFAULT_CURRENCY);
+    setValidationError(null);
   }
 
   return (
@@ -96,6 +135,8 @@ export function ApplicationFormDialog() {
         </DialogHeader>
 
         <form ref={formRef} onSubmit={handleSubmit} className='space-y-5'>
+          {!isDemoMode && <OfferImport onImported={handleImported} />}
+
           <div className='grid gap-4 sm:grid-cols-2'>
             <div className='grid gap-2 sm:col-span-2'>
               <Label htmlFor='companyName'>Company</Label>
@@ -118,7 +159,7 @@ export function ApplicationFormDialog() {
             </div>
 
             <div className='grid gap-2'>
-              <Label htmlFor='salaryMin'>Minimum salary (PLN)</Label>
+              <Label htmlFor='salaryMin'>Minimum salary ({currency})</Label>
               <Input
                 id='salaryMin'
                 name='salaryMin'
@@ -129,7 +170,7 @@ export function ApplicationFormDialog() {
             </div>
 
             <div className='grid gap-2'>
-              <Label htmlFor='salaryMax'>Maximum salary (PLN)</Label>
+              <Label htmlFor='salaryMax'>Maximum salary ({currency})</Label>
               <Input
                 id='salaryMax'
                 name='salaryMax'
