@@ -6,7 +6,8 @@ A personal job-application tracker for organizing a job search in one place. App
 
 **GitHub Pages demo:** Visit [demo](https://kamilfischbach.github.io/JobTracker/) to play with the app.
 
-![Job application demo](demo.png)
+![Job application demo header and filters](demoScreenshots/demo1.png)
+![Job application demo kanban board](demoScreenshots/demo2.png)
 
 The public demo uses fictional sample data stored in the visitor's browser. It does not connect to the personal PostgreSQL database.
 
