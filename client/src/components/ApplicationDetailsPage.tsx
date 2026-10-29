@@ -8,8 +8,9 @@ import {
 } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getApplication } from '../services/applications';
+import { getApplication, isDemoMode } from '../services/applications';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
+import { EmailActivity } from './EmailActivity';
 
 function formatDate(date: Date | null) {
   return date ? new Intl.DateTimeFormat('en-GB').format(date) : 'Not set';
@@ -140,6 +141,11 @@ export function ApplicationDetailsPage() {
             </dl>
           </CardContent>
         </Card>
+      )}
+
+      {/* The email automation needs the backend, so the demo hides it. */}
+      {query.data && !isDemoMode && (
+        <EmailActivity applicationId={query.data.id} />
       )}
     </main>
   );

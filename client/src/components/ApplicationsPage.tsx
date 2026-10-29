@@ -11,6 +11,7 @@ import {
   type ApplicationFilterState,
 } from '../lib/application-filters';
 import { filterAndSortApplications } from '../lib/application-list';
+import { celebrate } from '../lib/celebrate';
 import { COLUMN_CARD_LIMIT, getShownCards } from '../lib/column-cards';
 import {
   deleteApplications,
@@ -23,7 +24,6 @@ import {
   type ApplicationStatus,
 } from '../types/ApplicationStatus';
 import type { JobApplicationType } from '../types/JobApplication';
-import { celebrate } from '../lib/celebrate';
 import { ApplicationFilters } from './ApplicationFilters';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { HeroHeader } from './HeroHeader';
@@ -79,6 +79,9 @@ export function ApplicationsPage() {
   } = useQuery({
     queryKey: applicationsQueryKey,
     queryFn: getApplications,
+    // used for n8n email automation which
+    // can change statuses at any time.
+    refetchInterval: isDemoMode ? false : 30_000,
   });
 
   useEffect(() => {

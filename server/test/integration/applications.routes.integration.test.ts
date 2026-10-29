@@ -3,41 +3,15 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { Client } from 'pg';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { PrismaClient } from '../../src/generated/prisma/client.js';
+import { applyMigrations } from './database.js';
 
 let container: StartedPostgreSqlContainer;
 let prisma: PrismaClient;
 let app: ReturnType<typeof createApp>;
-
-async function applyMigrations(connectionString: string) {
-  const client = new Client({ connectionString });
-  await client.connect();
-
-  try {
-    const migrationFiles = [
-      new URL(
-        '../../prisma/migrations/20261002164211_init/migration.sql',
-        import.meta.url,
-      ),
-      new URL(
-        '../../prisma/migrations/20261015094724_keep_applied_date_only/migration.sql',
-        import.meta.url,
-      ),
-    ];
-
-    for (const migrationFile of migrationFiles) {
-      await client.query(await readFile(fileURLToPath(migrationFile), 'utf8'));
-    }
-  } finally {
-    await client.end();
-  }
-}
 
 describe('applications routes (PostgreSQL integration)', () => {
   beforeAll(async () => {
