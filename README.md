@@ -164,6 +164,12 @@ docker compose up -d
 pnpm --filter server exec prisma migrate dev --config prisma7.config.ts
 ```
 
+Optionally, load fictional demo data. It only runs on an empty database; `db:seed:reset` deletes all applications first:
+
+```powershell
+pnpm --filter server db:seed
+```
+
 Start the API and frontend in separate terminals:
 
 ```powershell
@@ -196,7 +202,7 @@ Open `http://localhost:5678` and, on the first visit, create the local n8n owner
 3. **Credentials in n8n:**
    - _Ollama_: base URL `http://host.docker.internal:11434`, used by the **Ollama** node.
    - _Header Auth_: name `X-Api-Key`, value = your `WEBHOOK_API_KEY`, used by **Send to JobTracker**.
-4. **Test without Gmail.** Open the workflow and run **Test with sample emails**. Add an application for "Acorn Labs" first to see a card move.
+4. **Test without Gmail.** Open the workflow and run **Test with sample emails**. With the demo data loaded, the Acorn Labs, Cedar Cloud and Birch AI cards move. For a demo with real Gmail, send the emails in [n8n/demo-emails.md](n8n/demo-emails.md).
 5. **Connect Gmail.** n8n needs permission to read and label your emails. Google gives that permission only to a registered app, so you register a small private app for yourself in [Google Cloud Console](https://console.cloud.google.com). This is free and done once.
 
    **a) Create a project and turn on Gmail access**
