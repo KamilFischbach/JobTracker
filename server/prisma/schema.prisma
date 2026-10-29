@@ -7,7 +7,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum ApplicationStatus{
+enum ApplicationStatus {
   SAVED
   APPLIED
   INTERVIEW_SCHEDULED
@@ -15,15 +15,54 @@ enum ApplicationStatus{
   REJECTED
 }
 
-model JobApplication{
-  id            String                @id @default(cuid())
-  companyName   String
-  jobTitle      String       
-  jobUrl        String?
-  status        ApplicationStatus     @default(SAVED)
-  salaryMin     Decimal?              @db.Decimal(10,2)
-  salaryMax     Decimal?              @db.Decimal(10,2)
-  currency      String                @default("PLN")
-  appliedDate   DateTime?             @db.Date
-  notes         String?               @db.Text
+model JobApplication {
+  id          String            @id @default(cuid())
+  companyName String
+  jobTitle    String
+  jobUrl      String?
+  status      ApplicationStatus @default(SAVED)
+  salaryMin   Decimal?          @db.Decimal(10, 2)
+  salaryMax   Decimal?          @db.Decimal(10, 2)
+  currency    String            @default("PLN")
+  appliedDate DateTime?         @db.Date
+  notes       String?           @db.Text
+  emailEvents EmailEvent[]
+}
+
+enum EmailCategory {
+  APPLICATION_RECEIVED
+  INTERVIEW_INVITATION
+  REJECTION
+  OFFER
+  NOT_JOB_RELATED
+}
+
+enum EmailOutcome {
+  UPDATED
+  NO_CHANGE
+  NEEDS_REVIEW
+  NO_MATCH
+  IGNORED
+}
+
+// One row per email processed by the n8n workflow. Email bodies are not stored.
+model EmailEvent {
+  id             String             @id @default(cuid())
+  gmailMessageId String             @unique
+  fromAddress    String
+  subject        String
+  receivedAt     DateTime
+  category       EmailCategory
+  companyName    String?
+  jobTitle       String?
+  confidence     Float
+  reason         String?            @db.Text
+  outcome        EmailOutcome
+  previousStatus ApplicationStatus?
+  newStatus      ApplicationStatus?
+  applicationId  String?
+  application    JobApplication?    @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now())
+
+  @@index([applicationId])
 }

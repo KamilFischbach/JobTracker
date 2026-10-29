@@ -1,0 +1,694 @@
+{
+  "id": "jtEmailStatus001",
+  "name": "JobTracker – Email status updates",
+  "active": false,
+  "nodes": [
+    {
+      "id": "dd8b5e4f-238a-58e0-8c80-f5717ba10ce8",
+      "name": "Setup notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -460
+      ],
+      "parameters": {
+        "content": "## JobTracker – email status updates\nReads new Gmail emails, lets the local LLM classify them and sends the result to the JobTracker API, which moves the matching card.\n\n**Setup**\n1. Create a *Gmail OAuth2* credential and select it in **New Gmail email** and the three **Gmail:** nodes on the right.\n2. Activate the workflow.\n\nProcessed emails get the Gmail label `JobTracker/Updated`, `JobTracker/Review` or `JobTracker/Error` (created automatically).\n\n**Test without Gmail:** click *Execute workflow* on **Test with sample emails**.",
+        "width": 560,
+        "height": 320
+      }
+    },
+    {
+      "id": "757d818c-886c-5921-ade8-2cc103a8a11b",
+      "name": "New Gmail email",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "in:inbox -category:promotions -category:social -category:forums"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5e1712be-4da1-582a-9205-3b4ebc52fc9c",
+      "name": "Test with sample emails",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5754d9de-0856-56c5-a75e-dedb843d07c4",
+      "name": "Sample emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Example emails for testing without Gmail. They use the same fields as the\n// Gmail Trigger. Each run gets new ids, so the API does not see duplicates.\nconst run = Date.now();\nconst samples = [\n  {\n    from: 'Anna Nowak <anna.nowak@acornlabs.pl>',\n    subject: 'Junior AI Automation Developer – zaproszenie na rozmowę',\n    text: `Dzień dobry,\n\ndziękujemy za przesłanie aplikacji na stanowisko Junior AI Automation Developer.\nChcielibyśmy zaprosić Pana na 30-minutową rozmowę online z zespołem.\nProszę o wybranie dogodnego terminu: czwartek 10:00 lub piątek 14:00.\n\nPozdrawiam,\nAnna Nowak\nTalent Acquisition, Acorn Labs Sp. z o.o.`,\n  },\n  {\n    from: 'Cedar Cloud Recruiting <no-reply@us.greenhouse-mail.io>',\n    subject: 'Your application to Cedar Cloud',\n    text: `Hi,\n\nThank you for your interest in the Frontend Developer position at Cedar Cloud.\nAfter careful consideration, we have decided to move forward with other candidates\nwhose experience more closely matches our current needs.\n\nWe wish you the best in your job search.\nThe Cedar Cloud Talent Team`,\n  },\n  {\n    from: 'Birch AI Careers <careers@birch.ai>',\n    subject: 'We received your application – Data Analyst',\n    text: `Thanks for applying to the Data Analyst role at Birch AI!\nOur team will review your application and get back to you within two weeks.`,\n  },\n  {\n    from: 'LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>',\n    subject: '10 new jobs for \"Frontend Developer\" in Warsaw',\n    text: `Frontend Developer – Acme Corp – Warsaw\nReact Developer – Globex – Remote\nJunior Frontend Engineer – Initech – Kraków\nSee all jobs`,\n  },\n];\n\nreturn samples.map((sample, index) => ({\n  json: {\n    ...sample,\n    id: `sample-${run}-${index + 1}`,\n    date: new Date().toISOString(),\n    isSample: true,\n  },\n}));"
+      }
+    },
+    {
+      "id": "641ab59d-ca37-5f1e-9d35-a588a7a9680f",
+      "name": "Prepare email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Turns a Gmail message (or a sample email) into a small, clean payload.\n// Small models do better with less noise, so quoted earlier messages are\n// dropped and the body is cut to 3000 characters.\nconst mail = $json;\n\nfunction htmlToText(html) {\n  return html\n    .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<br\\s*\\/?>|<\\/(p|div|li|tr|h\\d)>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\");\n}\n\n// Stop at the first line that starts a quoted earlier message.\nfunction withoutQuotes(text) {\n  const kept = [];\n  for (const line of text.split('\\n')) {\n    if (/^\\s*>/.test(line)) continue;\n    if (/^\\s*(On .+wrote:|W dniu .+(pisze|napisał\\(a\\)):|-{2,}\\s*Original Message)/i.test(line)) break;\n    kept.push(line);\n  }\n  return kept.join('\\n');\n}\n\nconst raw = mail.text || (mail.html ? htmlToText(mail.html) : '') || mail.snippet || '';\nconst body = withoutQuotes(raw)\n  .replace(/[ \\t]+/g, ' ')\n  .replace(/\\n\\s*\\n+/g, '\\n')\n  .trim()\n  .slice(0, 3000);\nconst from = typeof mail.from === 'string' ? mail.from : (mail.from?.text ?? '');\nconst receivedAt = mail.date ? new Date(mail.date) : new Date();\n\nreturn {\n  json: {\n    messageId: mail.id,\n    from,\n    subject: mail.subject ?? '',\n    receivedAt: receivedAt.toISOString(),\n    body,\n    isSample: mail.isSample === true,\n  },\n};"
+      }
+    },
+    {
+      "id": "59f3f54f-1650-5f94-b4ac-83a03c7add34",
+      "name": "Classify email",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        220
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "text": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"reason\": {\n      \"type\": \"string\"\n    },\n    \"category\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"APPLICATION_RECEIVED\",\n        \"INTERVIEW_INVITATION\",\n        \"REJECTION\",\n        \"OFFER\",\n        \"NOT_JOB_RELATED\"\n      ]\n    },\n    \"companyName\": {\n      \"type\": [\n        \"string\",\n        \"null\"\n      ]\n    },\n    \"jobTitle\": {\n      \"type\": [\n        \"string\",\n        \"null\"\n      ]\n    },\n    \"confidence\": {\n      \"type\": \"number\",\n      \"minimum\": 0,\n      \"maximum\": 1\n    }\n  },\n  \"required\": [\n    \"reason\",\n    \"category\",\n    \"companyName\",\n    \"jobTitle\",\n    \"confidence\"\n  ]\n}",
+        "options": {
+          "systemPromptTemplate": "You classify emails from a job seeker's personal inbox for their job application tracker.\nEmails can be in Polish or English.\n\nCategories:\n- APPLICATION_RECEIVED: confirmation that the person's application was received.\n- INTERVIEW_INVITATION: invitation to an interview, call, technical task or next recruitment stage, or a request to pick a time for one.\n- REJECTION: the company will not continue with the person's application.\n- OFFER: a job offer made to the person.\n- NOT_JOB_RELATED: everything else, including job alerts and newsletters (\"new jobs for you\"), recruiters' cold messages about roles the person did not apply for, marketing and private emails.\n\nRules:\n- companyName: the hiring company, not the job board or recruiting software (not LinkedIn, Pracuj.pl, NoFluffJobs, Just Join IT, Greenhouse, Workday, Lever, etc.). Use the text, the signature and the sender. null if unknown.\n- jobTitle: the position named in the email, or null.\n- confidence: from 0 to 1, how sure you are about the category. Use less than 0.7 when the email is unclear.\n- reason: one short sentence in English explaining the decision. Write it first, before choosing the category."
+        }
+      }
+    },
+    {
+      "id": "0e875c86-0551-5d6d-b4f0-fa1757ff65b8",
+      "name": "Ollama (qwen2.5:7b)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        680,
+        440
+      ],
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "temperature": 0,
+          "numCtx": 8192,
+          "format": "json"
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "id": "jtOllamaLocal01",
+          "name": "Ollama (host)"
+        }
+      }
+    },
+    {
+      "id": "06f7f10c-1533-5caf-9b4a-07bcc47ccb5e",
+      "name": "Email + classification",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        100
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "c17f52e3-d14a-5c94-b49e-1f80c9a0b4da",
+      "name": "Build payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The Merge node puts each email next to the LLM's answer for it.\n// This builds the JobTracker webhook body. Anything unexpected from the model\n// falls back to safe values: an unknown category is ignored and a missing\n// confidence counts as 0, which the API sends to review.\nconst email = $json;\nconst ai = email.output ?? {};\nconst categories = [\n  'APPLICATION_RECEIVED',\n  'INTERVIEW_INVITATION',\n  'REJECTION',\n  'OFFER',\n  'NOT_JOB_RELATED',\n];\nconst confidence = Number(ai.confidence);\n\nreturn {\n  json: {\n    messageId: email.messageId,\n    from: email.from,\n    subject: email.subject,\n    receivedAt: email.receivedAt,\n    category: categories.includes(ai.category) ? ai.category : 'NOT_JOB_RELATED',\n    companyName: ai.companyName || null,\n    jobTitle: ai.jobTitle || null,\n    confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,\n    reason: ai.reason ? String(ai.reason).slice(0, 1000) : null,\n    // Not used by the API: they skip Gmail labels for samples and catch errors.\n    isSample: email.isSample,\n    classificationError: email.error ?? null,\n  },\n};"
+      }
+    },
+    {
+      "id": "57750630-0576-5891-a459-a6d509a490e1",
+      "name": "Classified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7999e290-ca99-53c5-b861-7b55f7e00731",
+              "leftValue": "={{ $json.classificationError }}",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5c4f2cc5-5adf-5599-bc5a-9a7614492406",
+      "name": "Job related?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1620,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0115560f-2648-5dd1-923f-5439f4197da3",
+              "leftValue": "={{ $json.category }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "rightValue": "NOT_JOB_RELATED"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4b5beab9-18f7-5a9e-965b-df2be9552ce8",
+      "name": "Not job related",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2882d43e-736a-52a9-83f0-b658edcf820f",
+      "name": "Send to JobTracker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        -60
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/webhooks/email-status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jtApiKeyHeader01",
+          "name": "JobTracker API key"
+        }
+      }
+    },
+    {
+      "id": "6a353714-ed57-5585-8e36-f0d51c3cd864",
+      "name": "Label by outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2080,
+        -80
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1b81263b-a547-57e2-8222-688bc758f01f",
+                    "leftValue": "={{ $('Build payload').item.json.isSample }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Sample (no label)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7802c3b5-1f27-582c-9967-95806fe40fe7",
+                    "leftValue": "={{ $json.event.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "UPDATED"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Updated"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8f1e4636-919e-5607-a75f-27613af7c453",
+                    "leftValue": "={{ $json.event.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NEEDS_REVIEW"
+                  },
+                  {
+                    "id": "9dee9183-03ba-5488-ab3d-9e78b05d570f",
+                    "leftValue": "={{ $json.event.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NO_MATCH"
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "Review"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f0370212-a6f4-58cb-aced-217d60145feb",
+      "name": "Real email? (errors)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3da28b63-3744-5574-a09c-0e6db9d3074e",
+              "leftValue": "={{ $('Build payload').item.json.isSample }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "70d6fc91-5228-5e8c-98f7-b3e998681756",
+      "name": "Pick label name",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2320,
+        80
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "511e8f27-cb3a-5d66-9aa6-16221c0696f8",
+              "name": "labelName",
+              "value": "={{ $json.event ? ($json.event.outcome === 'UPDATED' ? 'JobTracker/Updated' : 'JobTracker/Review') : 'JobTracker/Error' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "533e6713-d40c-5572-b090-5ae2f0a612fc",
+      "name": "Gmail: create label if missing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2540,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/labels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { name: $json.labelName, labelListVisibility: 'labelShow', messageListVisibility: 'show' } }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0660ab17-49f6-568c-a0ef-897b904386b3",
+      "name": "Gmail: get labels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2760,
+        80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/labels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {}
+      }
+    },
+    {
+      "id": "b9e035b1-7292-5932-a83b-10ae12928b2b",
+      "name": "Gmail: add label to email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2980,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $('Build payload').item.json.messageId }}/modify",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { addLabelIds: [$json.labels.find(label => label.name === $('Pick label name').item.json.labelName).id] } }}"
+      }
+    }
+  ],
+  "connections": {
+    "New Gmail email": {
+      "main": [
+        [
+          {
+            "node": "Prepare email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test with sample emails": {
+      "main": [
+        [
+          {
+            "node": "Sample emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample emails": {
+      "main": [
+        [
+          {
+            "node": "Prepare email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare email": {
+      "main": [
+        [
+          {
+            "node": "Email + classification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Classify email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (qwen2.5:7b)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify email": {
+      "main": [
+        [
+          {
+            "node": "Email + classification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Email + classification": {
+      "main": [
+        [
+          {
+            "node": "Build payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build payload": {
+      "main": [
+        [
+          {
+            "node": "Classified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classified?": {
+      "main": [
+        [
+          {
+            "node": "Job related?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Real email? (errors)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job related?": {
+      "main": [
+        [
+          {
+            "node": "Send to JobTracker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not job related",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to JobTracker": {
+      "main": [
+        [
+          {
+            "node": "Label by outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Real email? (errors)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label by outcome": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Pick label name",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pick label name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real email? (errors)": {
+      "main": [
+        [
+          {
+            "node": "Pick label name",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Pick label name": {
+      "main": [
+        [
+          {
+            "node": "Gmail: create label if missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: create label if missing": {
+      "main": [
+        [
+          {
+            "node": "Gmail: get labels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: get labels": {
+      "main": [
+        [
+          {
+            "node": "Gmail: add label to email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw"
+  },
+  "pinData": {},
+  "tags": []
+}

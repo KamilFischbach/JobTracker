@@ -48,6 +48,16 @@ export function createApplicationsRouter(prisma: PrismaClient): Router {
     return response.json(application);
   });
 
+  // Emails the n8n workflow linked to this application, newest first.
+  router.get('/:id/email-events', async (request, response) => {
+    const events = await prisma.emailEvent.findMany({
+      where: { applicationId: request.params.id },
+      orderBy: { receivedAt: 'desc' },
+    });
+
+    return response.json(events);
+  });
+
   router.post('/', async (request, response) => {
     const parsed = createApplicationSchema.safeParse(request.body);
     if (!parsed.success) {

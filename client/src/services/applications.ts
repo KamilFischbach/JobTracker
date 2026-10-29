@@ -3,6 +3,7 @@ import {
   useDemoApplicationsStore,
 } from '../stores/demoApplicationsStore';
 import type { ApplicationStatus } from '../types/ApplicationStatus';
+import type { EmailEvent } from '../types/EmailEvent';
 import type {
   JobApplicationResponse,
   JobApplicationType,
@@ -106,6 +107,22 @@ export async function updateApplicationStatus({
   if (!response.ok) {
     throw await parseResponseError(response, 'Could not update status');
   }
+}
+
+// Emails the n8n workflow linked to an application. The demo has no backend.
+export async function getEmailEvents(
+  applicationId: string,
+): Promise<EmailEvent[]> {
+  if (isDemoMode) return [];
+
+  const response = await fetch(
+    `/api/applications/${encodeURIComponent(applicationId)}/email-events`,
+  );
+  if (!response.ok) {
+    throw await parseResponseError(response, 'Could not load email activity');
+  }
+
+  return response.json();
 }
 
 export type OfferDraft = {

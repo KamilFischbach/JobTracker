@@ -4,6 +4,7 @@ import { createOllamaClient } from './ai/llm.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { type AiDependencies, createAiRouter } from './routes/ai.js';
 import { createApplicationsRouter } from './routes/applications.js';
+import { createWebhooksRouter } from './routes/webhooks.js';
 
 function createDefaultAiDependencies(): AiDependencies {
   return {
@@ -18,12 +19,14 @@ function createDefaultAiDependencies(): AiDependencies {
 export function createApp(
   prisma: PrismaClient,
   ai: AiDependencies = createDefaultAiDependencies(),
+  webhookApiKey: string | undefined = process.env.WEBHOOK_API_KEY,
 ): Express {
   const app = express();
 
   app.use(express.json());
   app.use('/applications', createApplicationsRouter(prisma));
   app.use('/ai', createAiRouter(ai));
+  app.use('/webhooks', createWebhooksRouter(prisma, webhookApiKey));
 
   return app;
 }
