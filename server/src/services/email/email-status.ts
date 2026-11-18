@@ -1,7 +1,7 @@
 import type {
   ApplicationStatus,
   EmailCategory,
-} from '../generated/prisma/enums.js';
+} from '../../generated/prisma/enums.js';
 
 // Below this the email is logged for review, never applied automatically.
 export const CONFIDENCE_THRESHOLD = 0.7;

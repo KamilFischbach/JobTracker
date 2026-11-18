@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { type JobPage, PageFetchError } from '../ai/fetch-page.js';
-import { type LlmClient, LlmUnavailableError } from '../ai/llm.js';
+import { type JobPage, PageFetchError } from '../services/ai/fetch-page.js';
+import { type LlmClient, LlmUnavailableError } from '../services/ai/llm.js';
 import {
   extractOffer,
   InvalidLlmOutputError,
   NotAJobOfferError,
-} from '../ai/parse-offer.js';
+} from '../services/ai/parse-offer.js';
 
 export type AiDependencies = {
   llm: LlmClient;

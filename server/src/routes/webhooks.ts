@@ -5,7 +5,7 @@ import {
   CONFIDENCE_THRESHOLD,
   matchApplication,
   nextStatus,
-} from '../email/email-status.js';
+} from '../services/email/email-status.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type {
   ApplicationStatus,

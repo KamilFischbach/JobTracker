@@ -3,7 +3,7 @@ import {
   isSameCompany,
   matchApplication,
   nextStatus,
-} from '../../src/email/email-status.js';
+} from '../../src/services/email/email-status.js';
 
 describe('nextStatus', () => {
   it('moves applications forward', () => {

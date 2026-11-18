@@ -9,7 +9,7 @@ import {
   isPublicAddress,
   type JobPage,
   PageFetchError,
-} from '../../src/ai/fetch-page.js';
+} from '../../src/services/ai/fetch-page.js';
 
 // Lets a test decide what a host name resolves to; otherwise real DNS.
 const fakeDns = vi.hoisted(() => ({
@@ -28,14 +28,14 @@ vi.mock('node:dns', async (importOriginal) => {
   }) as typeof actual.lookup;
   return { ...actual, lookup, default: { ...actual, lookup } };
 });
-import { type LlmClient, LlmUnavailableError } from '../../src/ai/llm.js';
+import { type LlmClient, LlmUnavailableError } from '../../src/services/ai/llm.js';
 import {
   type ExtractedOffer,
   extractOffer,
   InvalidLlmOutputError,
   NotAJobOfferError,
   toOfferDraft,
-} from '../../src/ai/parse-offer.js';
+} from '../../src/services/ai/parse-offer.js';
 import { createApp } from '../../src/app.js';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createOllamaClient, LlmUnavailableError } from '../../src/ai/llm.js';
+import { createOllamaClient, LlmUnavailableError } from '../../src/services/ai/llm.js';
 import { createApp } from '../../src/app.js';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 

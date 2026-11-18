@@ -5,7 +5,7 @@ import {
 } from '@testcontainers/postgresql';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { LlmClient } from '../../src/ai/llm.js';
+import type { LlmClient } from '../../src/services/ai/llm.js';
 import { createApp } from '../../src/app.js';
 import { PrismaClient } from '../../src/generated/prisma/client.js';
 import { applyMigrations } from './database.js';
