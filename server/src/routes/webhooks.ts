@@ -95,12 +95,7 @@ export function createWebhooksRouter(
 
     try {
       const event = await prisma.$transaction(async (tx) => {
-        if (decision.applicationId && decision.newStatus) {
-          await tx.jobApplication.update({
-            where: { id: decision.applicationId },
-            data: { status: decision.newStatus },
-          });
-        }
+        const applied = await applyDecision(tx, decision);
         return tx.emailEvent.create({
           data: {
             gmailMessageId: email.messageId,
@@ -112,7 +107,7 @@ export function createWebhooksRouter(
             jobTitle: email.jobTitle,
             confidence: email.confidence,
             reason: email.reason,
-            ...decision,
+            ...applied,
           },
         });
       });
@@ -130,6 +125,45 @@ export function createWebhooksRouter(
   });
 
   return router;
+}
+
+type Transaction = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
+
+// decide() read the status before the transaction, so the user may have moved
+// the card since. The update only applies if the status is still the one the
+// decision was based on; otherwise the email is left for review.
+async function applyDecision(
+  tx: Transaction,
+  decision: Decision,
+): Promise<Decision> {
+  const { applicationId, previousStatus, newStatus } = decision;
+  if (!applicationId || !previousStatus || !newStatus) return decision;
+
+  const { count } = await tx.jobApplication.updateMany({
+    where: { id: applicationId, status: previousStatus },
+    data: { status: newStatus },
+  });
+  if (count === 1) return decision;
+
+  const current = await tx.jobApplication.findUnique({
+    where: { id: applicationId },
+    select: { status: true },
+  });
+  if (!current) {
+    // Deleted in the meantime: nothing left to link the email to.
+    return {
+      outcome: 'NO_MATCH',
+      applicationId: null,
+      previousStatus: null,
+      newStatus: null,
+    };
+  }
+  return {
+    outcome: 'NEEDS_REVIEW',
+    applicationId,
+    previousStatus: current.status,
+    newStatus: null,
+  };
 }
 
 async function decide(
