@@ -15,8 +15,41 @@ enum ApplicationStatus {
   REJECTED
 }
 
+// A registered account, or a temporary demo account (isDemo) that has no
+// email or password and is deleted after expiresAt. A check constraint in the
+// migration requires email and passwordHash for non-demo users.
+model User {
+  id              String           @id @default(cuid())
+  email           String?          @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  isDemo          Boolean          @default(false)
+  expiresAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  sessions        Session[]
+  applications    JobApplication[]
+
+  @@index([expiresAt])
+}
+
+// A logged-in browser. The id is the SHA-256 hash of the cookie token, so a
+// leaked database does not contain working sessions.
+model Session {
+  id         String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model JobApplication {
   id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName String
   jobTitle    String
   jobUrl      String?
@@ -27,6 +60,8 @@ model JobApplication {
   appliedDate DateTime?         @db.Date
   notes       String?           @db.Text
   emailEvents EmailEvent[]
+
+  @@index([userId])
 }
 
 enum EmailCategory {

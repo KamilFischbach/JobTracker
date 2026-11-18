@@ -1,18 +1,22 @@
-import { PrismaPg } from '@prisma/adapter-pg';
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from '@testcontainers/postgresql';
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import type { LlmClient } from '../../src/services/ai/llm.js';
 import { createApp } from '../../src/app.js';
-import { PrismaClient } from '../../src/generated/prisma/client.js';
-import { applyMigrations } from './database.js';
+import type { PrismaClient } from '../../src/generated/prisma/client.js';
+import { startTestDatabase } from './database.js';
+import { createUser, signIn } from './users.js';
 
 const API_KEY = 'test-webhook-key';
 
-let container: StartedPostgreSqlContainer;
+let database: Awaited<ReturnType<typeof startTestDatabase>>;
 let prisma: PrismaClient;
 let app: ReturnType<typeof createApp>;
 
@@ -38,6 +42,10 @@ function email(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function webhookApp(prisma: PrismaClient, apiKey: string | undefined) {
+  return createApp({ prisma, ai: unusedAi, emailWebhook: { enabled: true, apiKey } });
+}
+
 function send(body: object, apiKey = API_KEY) {
   return request(app)
     .post('/webhooks/email-status')
@@ -47,27 +55,27 @@ function send(body: object, apiKey = API_KEY) {
 
 describe('email status webhook (PostgreSQL integration)', () => {
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:17-alpine')
-      .withDatabase('jobtracker_test')
-      .withUsername('test_user')
-      .withPassword('test_password')
-      .start();
-
-    const connectionString = container.getConnectionUri();
-    await applyMigrations(connectionString);
-
-    prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-    app = createApp(prisma, unusedAi, API_KEY);
+    database = await startTestDatabase();
+    prisma = database.prisma;
+    app = webhookApp(prisma, API_KEY);
   }, 120_000);
+
+  // The webhook matches across all applications, so one owner is enough.
+  let ownerId: string;
+  let ownerCookie: string;
+
+  beforeEach(async () => {
+    ownerId = (await createUser(prisma, 'owner@example.com')).id;
+    ownerCookie = await signIn(prisma, ownerId);
+  });
 
   afterEach(async () => {
     await prisma.emailEvent.deleteMany();
-    await prisma.jobApplication.deleteMany();
+    await prisma.user.deleteMany();
   });
 
   afterAll(async () => {
-    await prisma?.$disconnect();
-    await container?.stop();
+    await database?.stop();
   });
 
   async function createApplication(data: {
@@ -75,7 +83,7 @@ describe('email status webhook (PostgreSQL integration)', () => {
     jobTitle: string;
     status?: 'SAVED' | 'APPLIED' | 'INTERVIEW_SCHEDULED' | 'OFFER' | 'REJECTED';
   }) {
-    return prisma.jobApplication.create({ data });
+    return prisma.jobApplication.create({ data: { ...data, userId: ownerId } });
   }
 
   it('rejects requests without the right API key', async () => {
@@ -83,8 +91,16 @@ describe('email status webhook (PostgreSQL integration)', () => {
     await send(email(), 'wrong-key').expect(401);
   });
 
+  it('is not mounted unless enabled', async () => {
+    await request(createApp({ prisma, ai: unusedAi }))
+      .post('/webhooks/email-status')
+      .set('X-Api-Key', API_KEY)
+      .send(email())
+      .expect(404);
+  });
+
   it('is disabled when no API key is configured', async () => {
-    await request(createApp(prisma, unusedAi, undefined))
+    await request(webhookApp(prisma, undefined))
       .post('/webhooks/email-status')
       .set('X-Api-Key', 'anything')
       .send(email())
@@ -121,6 +137,7 @@ describe('email status webhook (PostgreSQL integration)', () => {
 
     const activity = await request(app)
       .get(`/applications/${application.id}/email-events`)
+      .set('Cookie', ownerCookie)
       .expect(200);
     expect(activity.body).toHaveLength(1);
     expect(activity.body[0]).toMatchObject({ subject: 'Interview invitation' });
@@ -213,7 +230,10 @@ describe('email status webhook (PostgreSQL integration)', () => {
     });
     await send(email()).expect(201);
 
-    await request(app).delete(`/applications/${application.id}`).expect(204);
+    await request(app)
+      .delete(`/applications/${application.id}`)
+      .set('Cookie', ownerCookie)
+      .expect(204);
 
     const event = await prisma.emailEvent.findFirstOrThrow();
     expect(event.applicationId).toBeNull();
@@ -239,7 +259,7 @@ describe('email status webhook (PostgreSQL integration)', () => {
           return typeof value === 'function' ? value.bind(target) : value;
         },
       });
-      return createApp(racingPrisma, unusedAi, API_KEY);
+      return webhookApp(racingPrisma, API_KEY);
     }
 
     it('keeps the status the user set and flags the email for review', async () => {

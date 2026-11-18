@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import { InvalidInputError } from '../routes/validation.js';
+import { UnauthenticatedError } from './require-auth.js';
 import { PageFetchError } from '../services/ai/fetch-page.js';
 import { LlmUnavailableError } from '../services/ai/llm.js';
 import {
@@ -16,6 +17,7 @@ type ErrorClass = new (...args: never[]) => Error;
 // Errors that services throw on purpose, with messages written for the user,
 // and how they are answered. `code` lets the client react to specific cases.
 const KNOWN_ERRORS: { type: ErrorClass; status: number; code?: string }[] = [
+  { type: UnauthenticatedError, status: 401, code: 'UNAUTHENTICATED' },
   { type: ApplicationNotFoundError, status: 404 },
   { type: InvalidSalaryRangeError, status: 400 },
   { type: PageFetchError, status: 422, code: 'FETCH_FAILED' },

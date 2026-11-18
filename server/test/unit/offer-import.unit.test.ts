@@ -38,6 +38,7 @@ import {
 } from '../../src/services/ai/parse-offer.js';
 import { createApp } from '../../src/app.js';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
+import { fakeSessions, SIGNED_IN_COOKIE } from '../support/fake-auth.js';
 
 const offer: ExtractedOffer = {
   companyName: 'Acorn Labs',
@@ -263,7 +264,11 @@ describe('extractOffer', () => {
 describe('POST /ai/parse-offer', () => {
   function appWith(llm: LlmClient, fetchPage = vi.fn(async () => page)) {
     return {
-      app: createApp({} as PrismaClient, { llm, fetchPage }),
+      app: createApp({
+        prisma: {} as PrismaClient,
+        sessions: fakeSessions(),
+        ai: { llm, fetchPage },
+      }),
       fetchPage,
     };
   }
@@ -273,6 +278,7 @@ describe('POST /ai/parse-offer', () => {
 
     const response = await request(app)
       .post('/ai/parse-offer')
+      .set('Cookie', SIGNED_IN_COOKIE)
       .send({ url: page.url });
 
     expect(response.status).toBe(200);
@@ -290,6 +296,7 @@ describe('POST /ai/parse-offer', () => {
 
     const response = await request(app)
       .post('/ai/parse-offer')
+      .set('Cookie', SIGNED_IN_COOKIE)
       .send({ url: page.url, text: 'Offer text '.repeat(20) });
 
     expect(response.status).toBe(200);
@@ -301,6 +308,7 @@ describe('POST /ai/parse-offer', () => {
 
     const response = await request(app)
       .post('/ai/parse-offer')
+      .set('Cookie', SIGNED_IN_COOKIE)
       .send({ url: 'ftp://example.com/offer' });
 
     expect(response.status).toBe(400);
@@ -321,9 +329,11 @@ describe('POST /ai/parse-offer', () => {
 
     const blockedResponse = await request(blocked.app)
       .post('/ai/parse-offer')
+      .set('Cookie', SIGNED_IN_COOKIE)
       .send({ url: page.url });
     const offlineResponse = await request(appWith(offline).app)
       .post('/ai/parse-offer')
+      .set('Cookie', SIGNED_IN_COOKIE)
       .send({ url: page.url });
 
     expect(blockedResponse.status).toBe(422);

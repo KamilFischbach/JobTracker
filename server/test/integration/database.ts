@@ -1,5 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
+import { PrismaClient } from '../../src/generated/prisma/client.js';
 
 const migrationsDir = new URL('../../prisma/migrations/', import.meta.url);
 
@@ -24,4 +27,32 @@ export async function applyMigrations(connectionString: string) {
   } finally {
     await client.end();
   }
+}
+
+/**
+ * Starts a throwaway PostgreSQL container with all migrations applied.
+ *
+ * @returns {Promise<{ prisma: PrismaClient; stop: () => Promise<void> }>}
+ *   A client for it, and a function that disconnects and removes it.
+ */
+export async function startTestDatabase() {
+  const container = await new PostgreSqlContainer('postgres:17-alpine')
+    .withDatabase('jobtracker_test')
+    .withUsername('test_user')
+    .withPassword('test_password')
+    .start();
+
+  const connectionString = container.getConnectionUri();
+  await applyMigrations(connectionString);
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+  });
+
+  return {
+    prisma,
+    async stop() {
+      await prisma.$disconnect();
+      await container.stop();
+    },
+  };
 }
