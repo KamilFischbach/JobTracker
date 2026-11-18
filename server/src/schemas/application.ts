@@ -4,7 +4,7 @@ const fields = {
   companyName: z.string().trim().min(1),
   jobTitle: z.string().trim().min(1),
   jobUrl: z
-    .url({ protocol: /^https?$/, message: 'Enter a valid https link.' })
+    .url({ protocol: /^https?$/, message: 'Enter a valid http(s) link.' })
     .nullable()
     .optional(),
   status: z
