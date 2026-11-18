@@ -7,6 +7,7 @@ import type {
   EmailMessage,
   EmailSender,
 } from '../../src/services/auth/email-sender.js';
+import type { AiUsageService } from '../../src/services/ai/ai-usage.js';
 import type {
   AuthUser,
   SessionService,
@@ -73,5 +74,17 @@ export function fakeCaptcha(): CaptchaVerifier {
     async verify(token) {
       if (token === FAILING_CAPTCHA) throw new CaptchaFailedError();
     },
+  };
+}
+
+/**
+ * AI usage service without a database and without limits.
+ *
+ * @returns {AiUsageService} The fake.
+ */
+export function unlimitedAiUsage(): AiUsageService {
+  return {
+    getUsage: async () => ({ used: 0, limit: 20 }),
+    reserve: async () => async () => {},
   };
 }

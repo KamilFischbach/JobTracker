@@ -29,6 +29,7 @@ model User {
   updatedAt       DateTime         @updatedAt
   sessions        Session[]
   authTokens      AuthToken[]
+  aiUsages        AiUsage[]
   applications    JobApplication[]
 
   @@index([expiresAt])
@@ -126,4 +127,21 @@ model EmailEvent {
   createdAt      DateTime           @default(now())
 
   @@index([applicationId])
+}
+
+// One row per "Fill with AI" call that reached the LLM, for the daily limits.
+// ipKey is an HMAC of the client address (IPv6 per /64), never the raw IP.
+// Rows outlive their user (userId becomes null), so deleting a demo account
+// does not reset the limit of its address.
+model AiUsage {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  isDemo    Boolean
+  ipKey     String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([ipKey, createdAt])
+  @@index([createdAt])
 }

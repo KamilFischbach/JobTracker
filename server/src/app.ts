@@ -13,6 +13,12 @@ import { createWebhooksRouter } from './routes/webhooks.js';
 import { fetchJobPage } from './services/ai/fetch-page.js';
 import { createOllamaClient } from './services/ai/llm.js';
 import {
+  type AiLimits,
+  type AiUsageService,
+  createAiUsageService,
+  DEFAULT_AI_LIMITS,
+} from './services/ai/ai-usage.js';
+import {
   createOfferImportService,
   type OfferImportDependencies,
 } from './services/ai/offer-import.js';
@@ -35,8 +41,8 @@ import { createEmailProcessingService } from './services/email/email-processing.
 function createDefaultAiDependencies(): OfferImportDependencies {
   return {
     llm: createOllamaClient({
-      baseUrl: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
-      model: process.env.OLLAMA_MODEL ?? 'qwen2.5:7b',
+      baseUrl: 'http://localhost:11434',
+      model: 'qwen2.5:7b',
     }),
     fetchPage: fetchJobPage,
   };
@@ -58,8 +64,12 @@ export type AppOptions = {
     captcha: CaptchaVerifier;
     email: EmailSender;
   };
-  /** LLM client and page fetcher for the AI import; Ollama by default. */
+  /** LLM client and page fetcher for the AI import; local Ollama by default. */
   ai?: OfferImportDependencies;
+  /** Daily AI import limits and the secret for hashing client addresses. */
+  aiUsage?: { limits: AiLimits; ipHashSecret: string };
+  /** Replaces the usage service built from `aiUsage` (tests without a database). */
+  aiUsageService?: AiUsageService;
   /**
    * The n8n email webhook. Off unless `enabled`: its matching searches every
    * user's applications, so it only suits a single-user installation.
@@ -87,6 +97,8 @@ export function createApp({
     email: createConsoleEmailSender(),
   },
   ai = createDefaultAiDependencies(),
+  aiUsage = { limits: DEFAULT_AI_LIMITS, ipHashSecret: 'development-only' },
+  aiUsageService = createAiUsageService({ prisma, ...aiUsage }),
   emailWebhook = { enabled: false },
   trustProxy = 0,
   rateLimits = true,
@@ -123,7 +135,10 @@ export function createApp({
   app.use(
     '/ai',
     authenticated,
-    createAiRouter(createOfferImportService(ai)),
+    createAiRouter(
+      createOfferImportService(ai, aiUsageService),
+      limits.ai,
+    ),
   );
   if (emailWebhook.enabled) {
     app.use(

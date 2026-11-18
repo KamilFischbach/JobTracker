@@ -38,7 +38,11 @@ import {
 } from '../../src/services/ai/parse-offer.js';
 import { createApp } from '../../src/app.js';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
-import { fakeSessions, SIGNED_IN_COOKIE } from '../support/fake-auth.js';
+import {
+  fakeSessions,
+  SIGNED_IN_COOKIE,
+  unlimitedAiUsage,
+} from '../support/fake-auth.js';
 
 const offer: ExtractedOffer = {
   companyName: 'Acorn Labs',
@@ -261,12 +265,53 @@ describe('extractOffer', () => {
   });
 });
 
+describe('extractOffer input limit', () => {
+  it('sends at most maxChars of page text and structured data to the model', async () => {
+    const sent: string[] = [];
+    const llm: LlmClient = {
+      async generateJson({ messages }) {
+        sent.push(messages.map((message) => message.content).join(''));
+        return JSON.stringify(offer);
+      },
+    };
+    const long: JobPage = {
+      ...page,
+      structuredData: '§'.repeat(9_000),
+      text: '¤'.repeat(20_000),
+    };
+
+    await extractOffer(llm, long, 6_000);
+
+    const content = sent[0] ?? '';
+    expect(content.match(/§/g)?.length).toBe(2_000);
+    expect(content.match(/¤/g)?.length).toBe(4_000);
+  });
+
+  it('sends everything without a limit, with a strict-mode schema', async () => {
+    const sent: string[] = [];
+    const llm: LlmClient = {
+      async generateJson({ messages, schema }) {
+        sent.push(messages.map((message) => message.content).join(''));
+        // Strict providers reject the $schema keyword.
+        expect(schema).not.toHaveProperty('$schema');
+        expect(schema).toMatchObject({ additionalProperties: false });
+        return JSON.stringify(offer);
+      },
+    };
+
+    await extractOffer(llm, { ...page, text: '¤'.repeat(20_000) });
+
+    expect(sent[0]?.match(/¤/g)?.length).toBe(20_000);
+  });
+});
+
 describe('POST /ai/parse-offer', () => {
   function appWith(llm: LlmClient, fetchPage = vi.fn(async () => page)) {
     return {
       app: createApp({
         prisma: {} as PrismaClient,
         sessions: fakeSessions(),
+        aiUsageService: unlimitedAiUsage(),
         ai: { llm, fetchPage },
       }),
       fetchPage,

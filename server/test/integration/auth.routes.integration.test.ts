@@ -477,7 +477,12 @@ describe('auth routes (PostgreSQL integration)', () => {
         data: { id: 'expired', purpose: 'SIGNUP', email: 'x@example.com', passwordHash: 'x', expiresAt: past },
       });
 
-      expect(await deleteExpired(prisma)).toEqual({ sessions: 1, tokens: 1, demoUsers: 1 });
+      expect(await deleteExpired(prisma)).toEqual({
+        sessions: 1,
+        tokens: 1,
+        demoUsers: 1,
+        aiUsages: 0,
+      });
 
       expect(await prisma.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })).toEqual(
         [{ id: user.id }, { id: activeDemo.id }].sort((a, b) => a.id.localeCompare(b.id)),

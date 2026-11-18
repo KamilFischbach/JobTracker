@@ -6,6 +6,15 @@ const optional = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const limit = (fallback: number) => z.coerce.number().int().min(0).default(fallback);
+
+const LLM_DEFAULTS = {
+  ollama: { baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', maxInputChars: 24_000 },
+  // ~8k characters keeps a request (and its one retry) inside Groq's free
+  // per-minute token budget.
+  groq: { baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-20b', maxInputChars: 8_000 },
+} as const;
+
 const envSchema = z
   .object({
     NODE_ENV: z
@@ -23,8 +32,16 @@ const envSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     WEBHOOK_API_KEY: optional,
-    OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
-    OLLAMA_MODEL: z.string().min(1).default('qwen2.5:7b'),
+    LLM_PROVIDER: z.enum(['ollama', 'groq']).default('ollama'),
+    LLM_BASE_URL: optional.pipe(z.url().optional()),
+    LLM_MODEL: optional,
+    LLM_API_KEY: optional,
+    LLM_MAX_INPUT_CHARS: z.coerce.number().int().min(1000).optional(),
+    AI_LIMIT_PER_USER: limit(20),
+    AI_LIMIT_PER_DEMO_IP: limit(3),
+    AI_LIMIT_DEMO_TOTAL: limit(50),
+    AI_LIMIT_TOTAL: limit(500),
+    IP_HASH_SECRET: optional,
   })
   .superRefine((env, context) => {
     const require = (ok: boolean, path: string, message: string) => {
@@ -34,15 +51,44 @@ const envSchema = z
       require(!!env.RESEND_API_KEY, 'RESEND_API_KEY', 'needed for EMAIL_PROVIDER=resend');
       require(!!env.EMAIL_FROM, 'EMAIL_FROM', 'needed for EMAIL_PROVIDER=resend');
     }
+    if (env.LLM_PROVIDER === 'groq') {
+      require(!!env.LLM_API_KEY, 'LLM_API_KEY', 'needed for LLM_PROVIDER=groq');
+    }
     if (env.NODE_ENV === 'production') {
+      require(
+        (env.IP_HASH_SECRET?.length ?? 0) >= 32,
+        'IP_HASH_SECRET',
+        'required in production, at least 32 characters',
+      );
       require(env.APP_URL.startsWith('https://'), 'APP_URL', 'must be https:// in production');
       require(!!env.TURNSTILE_SECRET_KEY, 'TURNSTILE_SECRET_KEY', 'required in production');
       require(env.EMAIL_PROVIDER === 'resend', 'EMAIL_PROVIDER', 'must be "resend" in production');
     }
+  })
+  .transform((env) => {
+    const defaults = LLM_DEFAULTS[env.LLM_PROVIDER];
+    return {
+      ...env,
+      llm: {
+        provider: env.LLM_PROVIDER,
+        baseUrl: env.LLM_BASE_URL ?? defaults.baseUrl,
+        model: env.LLM_MODEL ?? defaults.model,
+        apiKey: env.LLM_API_KEY,
+        maxInputChars: env.LLM_MAX_INPUT_CHARS ?? defaults.maxInputChars,
+      },
+      aiLimits: {
+        perUser: env.AI_LIMIT_PER_USER,
+        perDemoIp: env.AI_LIMIT_PER_DEMO_IP,
+        demoTotal: env.AI_LIMIT_DEMO_TOTAL,
+        total: env.AI_LIMIT_TOTAL,
+      },
+      ipHashSecret: env.IP_HASH_SECRET ?? 'development-only',
+    };
   });
 
 /**
- * Server settings read from environment variables.
+ * Server settings read from environment variables, plus the derived `llm`,
+ * `aiLimits` and `ipHashSecret` settings.
  */
 export type Config = z.output<typeof envSchema>;
 

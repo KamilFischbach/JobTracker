@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { prisma } from './prisma.js';
 import { fetchJobPage } from './services/ai/fetch-page.js';
 import { createOllamaClient } from './services/ai/llm.js';
+import { createOpenAiCompatibleClient } from './services/ai/openai-compatible.js';
 import {
   createDisabledCaptcha,
   createTurnstileVerifier,
@@ -15,6 +16,7 @@ import {
 } from './services/auth/email-sender.js';
 
 const config = loadConfig();
+const { llm } = config;
 
 if (!config.TURNSTILE_SECRET_KEY) {
   console.warn('TURNSTILE_SECRET_KEY is not set: CAPTCHA checks are off.');
@@ -36,12 +38,20 @@ const app = createApp({
         : createConsoleEmailSender(),
   },
   ai: {
-    llm: createOllamaClient({
-      baseUrl: config.OLLAMA_BASE_URL,
-      model: config.OLLAMA_MODEL,
-    }),
+    llm:
+      llm.provider === 'groq' && llm.apiKey
+        ? createOpenAiCompatibleClient({
+            baseUrl: llm.baseUrl,
+            apiKey: llm.apiKey,
+            model: llm.model,
+            // gpt-oss models reason before answering; low keeps it short.
+            reasoningEffort: llm.model.includes('gpt-oss') ? 'low' : undefined,
+          })
+        : createOllamaClient({ baseUrl: llm.baseUrl, model: llm.model }),
     fetchPage: fetchJobPage,
+    maxInputChars: llm.maxInputChars,
   },
+  aiUsage: { limits: config.aiLimits, ipHashSecret: config.ipHashSecret },
   emailWebhook: {
     enabled: config.ENABLE_EMAIL_WEBHOOK,
     apiKey: config.WEBHOOK_API_KEY,

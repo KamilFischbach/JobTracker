@@ -37,7 +37,10 @@ export type OfferDraft = {
   warning: string | null;
 };
 
-const offerJsonSchema = z.toJSONSchema(extractedOfferSchema);
+// Every field is required (nullable when unknown) and no extra keys are
+// allowed, which strict structured-output modes (Groq, OpenAI) demand.
+// `$schema` is dropped because some providers reject unknown keywords.
+const { $schema: _draft, ...offerJsonSchema } = z.toJSONSchema(extractedOfferSchema);
 
 const SYSTEM_PROMPT = `You extract data from job offers for a job application tracker.
 Rules:
@@ -58,6 +61,18 @@ Rules:
 const PERIOD_TO_MONTHLY = { HOUR: 168, DAY: 21, MONTH: 1, YEAR: 1 / 12 };
 const PERIOD_LABEL = { HOUR: 'h', DAY: 'day', MONTH: 'month', YEAR: 'year' };
 const MAX_ATTEMPTS = 2;
+
+// Keeps the request inside the provider's token budget. Structured data is
+// dense and gets up to a third; the page text gets the rest.
+function limitPage(page: JobPage, maxChars: number | undefined): JobPage {
+  if (!maxChars) return page;
+  const structuredData = page.structuredData?.slice(0, Math.floor(maxChars / 3)) ?? null;
+  return {
+    ...page,
+    structuredData,
+    text: page.text.slice(0, maxChars - (structuredData?.length ?? 0)),
+  };
+}
 
 function buildPageMessage(page: JobPage) {
   return [
@@ -135,13 +150,24 @@ export function toOfferDraft(offer: ExtractedOffer, url: string): OfferDraft {
   };
 }
 
+/**
+ * Asks the LLM for the offer's fields, validates the answer (one retry with
+ * the error fed back) and converts it into a form draft.
+ *
+ * @param {LlmClient} llm       Model client.
+ * @param {JobPage}   page      Downloaded or pasted offer.
+ * @param {number}    maxChars  Cap on page text + structured data sent to the model.
+ * @returns {Promise<OfferDraft>}
+ * @throws {NotAJobOfferError | InvalidLlmOutputError | LlmUnavailableError}
+ */
 export async function extractOffer(
   llm: LlmClient,
   page: JobPage,
+  maxChars?: number,
 ): Promise<OfferDraft> {
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: buildPageMessage(page) },
+    { role: 'user', content: buildPageMessage(limitPage(page, maxChars)) },
   ];
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

@@ -44,8 +44,8 @@ function loginEmailKey(request: Request) {
  * @param {boolean} enabled  Whether to limit at all.
  * @returns {object}  Limiters: `api` (every route), `login` (failed logins,
  *   per address and per email), `sendsEmail` (sign-up / forgot password),
- *   `links` (opening email links) and `account` (password checks of a
- *   logged-in user).
+ *   `links` (opening email links), `account` (password checks of a
+ *   logged-in user) and `ai` (offer imports).
  */
 export function createRateLimits(enabled = true) {
   if (!enabled) {
@@ -55,6 +55,7 @@ export function createRateLimits(enabled = true) {
       sendsEmail: skipAll,
       links: skipAll,
       account: skipAll,
+      ai: skipAll,
     };
   }
   return {
@@ -72,6 +73,8 @@ export function createRateLimits(enabled = true) {
     sendsEmail: limiter({ windowMs: 60 * MINUTE, limit: 5 }),
     links: limiter({ windowMs: 15 * MINUTE, limit: 20 }),
     account: limiter({ windowMs: 15 * MINUTE, limit: 10, skipSuccessfulRequests: true }),
+    // Each import downloads a page; the daily AI limits are counted separately.
+    ai: limiter({ windowMs: MINUTE, limit: 10 }),
   };
 }
 

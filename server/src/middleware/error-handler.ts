@@ -11,6 +11,7 @@ import { EmailDeliveryError } from '../services/auth/email-sender.js';
 import { RateLimitedError } from './rate-limit.js';
 import { UnauthenticatedError } from './require-auth.js';
 import { ForbiddenOriginError } from './same-origin.js';
+import { AiLimitReachedError } from '../services/ai/ai-usage.js';
 import { PageFetchError } from '../services/ai/fetch-page.js';
 import { LlmUnavailableError } from '../services/ai/llm.js';
 import {
@@ -41,6 +42,7 @@ const KNOWN_ERRORS: { type: ErrorClass; status: number; code?: string }[] = [
   { type: PageFetchError, status: 422, code: 'FETCH_FAILED' },
   { type: NotAJobOfferError, status: 422, code: 'NOT_A_JOB_OFFER' },
   { type: InvalidLlmOutputError, status: 502, code: 'AI_INVALID_OUTPUT' },
+  { type: AiLimitReachedError, status: 429, code: 'AI_LIMIT_REACHED' },
   { type: LlmUnavailableError, status: 503, code: 'AI_UNAVAILABLE' },
 ];
 
