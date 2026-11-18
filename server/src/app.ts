@@ -10,6 +10,7 @@ import {
   createOfferImportService,
   type OfferImportDependencies,
 } from './services/ai/offer-import.js';
+import { createEmailProcessingService } from './services/email/email-processing.js';
 
 function createDefaultAiDependencies(): OfferImportDependencies {
   return {
@@ -40,7 +41,10 @@ export function createApp(
   app.use(express.json());
   app.use('/applications', createApplicationsRouter(prisma));
   app.use('/ai', createAiRouter(createOfferImportService(ai)));
-  app.use('/webhooks', createWebhooksRouter(prisma, webhookApiKey));
+  app.use(
+    '/webhooks',
+    createWebhooksRouter(createEmailProcessingService(prisma), webhookApiKey),
+  );
   app.use(errorHandler);
 
   return app;

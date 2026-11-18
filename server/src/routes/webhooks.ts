@@ -1,74 +1,19 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-import { type RequestHandler, Router } from 'express';
-import { z } from 'zod';
-import {
-  CONFIDENCE_THRESHOLD,
-  matchApplication,
-  nextStatus,
-} from '../services/email/email-status.js';
-import type { PrismaClient } from '../generated/prisma/client.js';
-import type {
-  ApplicationStatus,
-  EmailOutcome,
-} from '../generated/prisma/enums.js';
+import { Router } from 'express';
+import { requireApiKey } from '../middleware/require-api-key.js';
+import { emailStatusSchema } from '../schemas/email.js';
+import type { EmailProcessingService } from '../services/email/email-processing.js';
+import { parseInput } from './validation.js';
 
-// Hashing first gives equal-length buffers, which timingSafeEqual needs.
-function sameSecret(a: string, b: string) {
-  const digest = (value: string) => createHash('sha256').update(value).digest();
-  return timingSafeEqual(digest(a), digest(b));
-}
-
-export function requireApiKey(apiKey: string | undefined): RequestHandler {
-  return (request, response, next) => {
-    if (!apiKey) {
-      return response
-        .status(503)
-        .json({ message: 'Webhooks are disabled. Set WEBHOOK_API_KEY.' });
-    }
-    const sent = request.get('x-api-key');
-    if (!sent || !sameSecret(sent, apiKey)) {
-      return response.status(401).json({ message: 'Invalid API key.' });
-    }
-    return next();
-  };
-}
-
-const emailStatusSchema = z.object({
-  messageId: z.string().trim().min(1).max(255),
-  from: z.string().trim().max(320),
-  subject: z.string().max(998).default(''),
-  receivedAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),
-  category: z.enum([
-    'APPLICATION_RECEIVED',
-    'INTERVIEW_INVITATION',
-    'REJECTION',
-    'OFFER',
-    'NOT_JOB_RELATED',
-  ]),
-  companyName: z.string().trim().max(200).nullish().transform((v) => v || null),
-  jobTitle: z.string().trim().max(200).nullish().transform((v) => v || null),
-  confidence: z.number().min(0).max(1),
-  reason: z.string().trim().max(1000).nullish().transform((v) => v || null),
-});
-
-type Decision = {
-  outcome: EmailOutcome;
-  applicationId: string | null;
-  previousStatus: ApplicationStatus | null;
-  newStatus: ApplicationStatus | null;
-};
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'P2002'
-  );
-}
-
+/**
+ * Routes under `/webhooks`, called by the n8n workflow. All of them require
+ * the `X-Api-Key` header.
+ *
+ * @param {EmailProcessingService} emails  Service that applies classified emails.
+ * @param {string | undefined}     apiKey  Expected `X-Api-Key`; routes answer 503 without it.
+ * @returns {Router}                       The router.
+ */
 export function createWebhooksRouter(
-  prisma: PrismaClient,
+  emails: EmailProcessingService,
   apiKey: string | undefined,
 ): Router {
   const router: Router = Router();
@@ -76,125 +21,10 @@ export function createWebhooksRouter(
 
   // Called by the n8n workflow after the LLM has classified an email.
   router.post('/email-status', async (request, response) => {
-    const parsed = emailStatusSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return response.status(400).json({
-        message: parsed.error.issues[0]?.message ?? 'Invalid input.',
-        errors: parsed.error.issues,
-      });
-    }
-    const email = parsed.data;
-
-    // n8n may retry or re-read an email: process each message only once.
-    const existing = await prisma.emailEvent.findUnique({
-      where: { gmailMessageId: email.messageId },
-    });
-    if (existing) return response.json({ duplicate: true, event: existing });
-
-    const decision = await decide(prisma, email);
-
-    try {
-      const event = await prisma.$transaction(async (tx) => {
-        const applied = await applyDecision(tx, decision);
-        return tx.emailEvent.create({
-          data: {
-            gmailMessageId: email.messageId,
-            fromAddress: email.from,
-            subject: email.subject,
-            receivedAt: email.receivedAt,
-            category: email.category,
-            companyName: email.companyName,
-            jobTitle: email.jobTitle,
-            confidence: email.confidence,
-            reason: email.reason,
-            ...applied,
-          },
-        });
-      });
-      return response.status(201).json({ duplicate: false, event });
-    } catch (error) {
-      // Two deliveries of the same email at once: the second one loses.
-      if (isUniqueViolation(error)) {
-        const event = await prisma.emailEvent.findUnique({
-          where: { gmailMessageId: email.messageId },
-        });
-        return response.json({ duplicate: true, event });
-      }
-      throw error;
-    }
+    const email = parseInput(emailStatusSchema, request.body);
+    const result = await emails.processEmail(email);
+    response.status(result.duplicate ? 200 : 201).json(result);
   });
 
   return router;
-}
-
-type Transaction = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
-
-// decide() read the status before the transaction, so the user may have moved
-// the card since. The update only applies if the status is still the one the
-// decision was based on; otherwise the email is left for review.
-async function applyDecision(
-  tx: Transaction,
-  decision: Decision,
-): Promise<Decision> {
-  const { applicationId, previousStatus, newStatus } = decision;
-  if (!applicationId || !previousStatus || !newStatus) return decision;
-
-  const { count } = await tx.jobApplication.updateMany({
-    where: { id: applicationId, status: previousStatus },
-    data: { status: newStatus },
-  });
-  if (count === 1) return decision;
-
-  const current = await tx.jobApplication.findUnique({
-    where: { id: applicationId },
-    select: { status: true },
-  });
-  if (!current) {
-    // Deleted in the meantime: nothing left to link the email to.
-    return {
-      outcome: 'NO_MATCH',
-      applicationId: null,
-      previousStatus: null,
-      newStatus: null,
-    };
-  }
-  return {
-    outcome: 'NEEDS_REVIEW',
-    applicationId,
-    previousStatus: current.status,
-    newStatus: null,
-  };
-}
-
-async function decide(
-  prisma: PrismaClient,
-  email: z.infer<typeof emailStatusSchema>,
-): Promise<Decision> {
-  const none = { applicationId: null, previousStatus: null, newStatus: null };
-
-  if (email.category === 'NOT_JOB_RELATED') {
-    return { outcome: 'IGNORED', ...none };
-  }
-
-  const applications = await prisma.jobApplication.findMany({
-    select: { id: true, companyName: true, jobTitle: true, status: true },
-  });
-  const match = matchApplication(applications, email);
-  if (match.kind === 'none') return { outcome: 'NO_MATCH', ...none };
-  if (match.kind === 'ambiguous') return { outcome: 'NEEDS_REVIEW', ...none };
-
-  const { application } = match;
-  const linked = {
-    applicationId: application.id,
-    previousStatus: application.status,
-  };
-
-  if (email.confidence < CONFIDENCE_THRESHOLD) {
-    return { outcome: 'NEEDS_REVIEW', ...linked, newStatus: null };
-  }
-
-  const status = nextStatus(email.category, application.status);
-  return status
-    ? { outcome: 'UPDATED', ...linked, newStatus: status }
-    : { outcome: 'NO_CHANGE', ...linked, newStatus: null };
 }
