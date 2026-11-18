@@ -1,11 +1,33 @@
+import type { LookupAddress } from 'node:dns';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   extractPageContent,
   fetchJobPage,
+  isPublicAddress,
   type JobPage,
   PageFetchError,
 } from '../../src/ai/fetch-page.js';
+
+// Lets a test decide what a host name resolves to; otherwise real DNS.
+const fakeDns = vi.hoisted(() => ({
+  answer: null as LookupAddress[] | null,
+}));
+vi.mock('node:dns', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:dns')>();
+  const lookup = ((...args: Parameters<typeof actual.lookup>) => {
+    const answer = fakeDns.answer;
+    const callback = args[args.length - 1] as unknown as (
+      error: Error | null,
+      addresses: LookupAddress[],
+    ) => void;
+    if (!answer) return (actual.lookup as (...a: unknown[]) => void)(...args);
+    process.nextTick(() => callback(null, answer));
+  }) as typeof actual.lookup;
+  return { ...actual, lookup, default: { ...actual, lookup } };
+});
 import { type LlmClient, LlmUnavailableError } from '../../src/ai/llm.js';
 import {
   type ExtractedOffer,
@@ -103,10 +125,80 @@ describe('fetchJobPage', () => {
     'http://169.254.169.254/latest/meta-data',
     'http://[::1]/',
     'http://localhost:5432/',
+    // IPv4-mapped IPv6 in the hex form Node normalizes it to.
+    'http://[::ffff:127.0.0.1]/',
+    'http://[::ffff:169.254.169.254]/latest/meta-data',
+    // NAT64, 6to4, IPv6 link-local and the benchmarking range.
+    'http://[64:ff9b::7f00:1]/',
+    'http://[2002:7f00:1::]/',
+    'http://[fe80::1]/',
+    'http://198.18.0.1/',
   ])('refuses local address %s', async (url) => {
     await expect(fetchJobPage(url)).rejects.toThrow(
       'Links to local addresses are not allowed.',
     );
+  });
+
+  describe('host names resolving to local addresses', () => {
+    afterEach(() => {
+      fakeDns.answer = null;
+    });
+
+    it('checks the address the connection uses, so DNS rebinding cannot reach the server', async () => {
+      let requests = 0;
+      const server = createServer((_request, response) => {
+        requests++;
+        response.end('<p>secret internal page</p>');
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, '127.0.0.1', resolve),
+      );
+      const { port } = server.address() as AddressInfo;
+
+      try {
+        fakeDns.answer = [{ address: '127.0.0.1', family: 4 }];
+        await expect(
+          fetchJobPage(`http://rebind.example:${port}/`),
+        ).rejects.toThrow('Links to local addresses are not allowed.');
+        expect(requests).toBe(0);
+      } finally {
+        server.close();
+      }
+    });
+
+    it('refuses a host name when any of its addresses is local', async () => {
+      fakeDns.answer = [
+        { address: '93.184.215.14', family: 4 },
+        { address: '::ffff:10.0.0.1', family: 6 },
+      ];
+      await expect(fetchJobPage('http://mixed.example/')).rejects.toThrow(
+        'Links to local addresses are not allowed.',
+      );
+    });
+  });
+});
+
+describe('isPublicAddress', () => {
+  it.each(['8.8.8.8', '93.184.215.14', '2606:4700:4700::1111'])(
+    'allows public address %s',
+    (address) => {
+      expect(isPublicAddress(address)).toBe(true);
+    },
+  );
+
+  it.each([
+    '127.0.0.1',
+    '10.1.2.3',
+    '100.64.0.1',
+    '0.0.0.0',
+    '224.0.0.1',
+    '::ffff:7f00:1',
+    '::ffff:a9fe:a9fe',
+    '64:ff9b::a9fe:a9fe',
+    'fd00::1',
+    'not an ip',
+  ])('rejects %s', (address) => {
+    expect(isPublicAddress(address)).toBe(false);
   });
 });
 
