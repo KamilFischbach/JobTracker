@@ -62,9 +62,14 @@ export function createOllamaClient({
         );
       }
 
-      const body = (await response.json()) as {
-        message?: { content?: string };
-      };
+      let body: { message?: { content?: string } };
+      try {
+        body = (await response.json()) as typeof body;
+      } catch {
+        throw new LlmUnavailableError(
+          `Ollama at ${baseUrl} sent a response that is not JSON.`,
+        );
+      }
       return body.message?.content ?? '';
     },
   };

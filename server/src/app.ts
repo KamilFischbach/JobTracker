@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import { fetchJobPage } from './ai/fetch-page.js';
 import { createOllamaClient } from './ai/llm.js';
 import type { PrismaClient } from './generated/prisma/client.js';
+import { errorHandler } from './middleware/error-handler.js';
 import { type AiDependencies, createAiRouter } from './routes/ai.js';
 import { createApplicationsRouter } from './routes/applications.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
@@ -27,6 +28,7 @@ export function createApp(
   app.use('/applications', createApplicationsRouter(prisma));
   app.use('/ai', createAiRouter(ai));
   app.use('/webhooks', createWebhooksRouter(prisma, webhookApiKey));
+  app.use(errorHandler);
 
   return app;
 }
