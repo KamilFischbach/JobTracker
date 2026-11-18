@@ -1,14 +1,7 @@
 import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
-import { type IncomingMessage, request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
-import { pipeline, type Readable } from 'node:stream';
-import {
-  createBrotliDecompress,
-  createGunzip,
-  createInflate,
-} from 'node:zlib';
 import ipaddr from 'ipaddr.js';
+import { Agent, fetch, type Response } from 'undici';
 
 /**
  * A job offer page could not be downloaded or read. The message is safe to
@@ -44,14 +37,6 @@ const REQUEST_HEADERS = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
   Accept: 'text/html,application/xhtml+xml',
   'Accept-Language': 'pl,en;q=0.8',
-  'Accept-Encoding': 'gzip, deflate, br',
-};
-
-const DECOMPRESSORS: Record<string, () => NodeJS.ReadWriteStream> = {
-  gzip: createGunzip,
-  'x-gzip': createGunzip,
-  deflate: createInflate,
-  br: createBrotliDecompress,
 };
 
 /**
@@ -104,6 +89,9 @@ const pinnedLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
+// Node's built-in fetch cannot take a custom DNS lookup; undici's Agent can.
+const dispatcher = new Agent({ connect: { lookup: pinnedLookup } });
+
 function findCause<T>(
   error: unknown,
   match: (cause: unknown) => cause is T,
@@ -137,36 +125,23 @@ function toPageFetchError(error: unknown, url: URL, signal: AbortSignal) {
   );
 }
 
-// node:http instead of fetch, because only node:http lets the request use
-// pinnedLookup for its connection.
-function sendRequest(url: URL, signal: AbortSignal) {
-  const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
-  return new Promise<IncomingMessage>((resolve, reject) => {
-    send(url, { headers: REQUEST_HEADERS, lookup: pinnedLookup, signal }, resolve)
-      .on('error', reject)
-      .end();
-  });
-}
+async function readLimitedBody(response: Response) {
+  if (!response.body) return '';
 
-// Reads at most MAX_BYTES of the decompressed body, so a small compressed
-// response cannot expand into a huge one.
-async function readLimitedBody(response: IncomingMessage) {
-  const encoding = (response.headers['content-encoding'] ?? '')
-    .trim()
-    .toLowerCase();
-  const decompressor = DECOMPRESSORS[encoding]?.();
-  const body: Readable | NodeJS.ReadWriteStream = decompressor
-    ? pipeline(response, decompressor, () => {})
-    : response;
-
-  const chunks: Buffer[] = [];
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
   let size = 0;
-  for await (const chunk of body as AsyncIterable<Buffer>) {
-    size += chunk.byteLength;
-    if (size > MAX_BYTES) break;
-    chunks.push(chunk);
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BYTES) {
+      await reader.cancel();
+      break;
+    }
+    chunks.push(value);
   }
-  response.destroy();
 
   return Buffer.concat(chunks).toString('utf8');
 }
@@ -187,32 +162,36 @@ export async function fetchJobPage(rawUrl: string): Promise<JobPage> {
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
     assertAllowedUrl(url);
 
-    let response: IncomingMessage;
+    let response: Response;
     try {
-      response = await sendRequest(url, signal);
+      response = await fetch(url, {
+        dispatcher,
+        redirect: 'manual',
+        signal,
+        headers: REQUEST_HEADERS,
+      });
     } catch (error) {
       throw toPageFetchError(error, url, signal);
     }
 
-    const status = response.statusCode ?? 0;
-    const location = response.headers.location;
-    if (status >= 300 && status < 400 && location) {
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) {
       // Release the connection before following the redirect.
-      response.destroy();
+      await response.body?.cancel();
       url = new URL(location, url);
       continue;
     }
 
-    if (status < 200 || status >= 300) {
-      response.destroy();
+    if (!response.ok) {
+      await response.body?.cancel();
       throw new PageFetchError(
-        `The website refused the request (HTTP ${status}).`,
+        `The website refused the request (HTTP ${response.status}).`,
       );
     }
 
-    const contentType = response.headers['content-type'] ?? '';
+    const contentType = response.headers.get('content-type') ?? '';
     if (contentType && !/html|text\/plain/i.test(contentType)) {
-      response.destroy();
+      await response.body?.cancel();
       throw new PageFetchError('The link does not point to a web page.');
     }
 
