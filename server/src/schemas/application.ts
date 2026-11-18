@@ -3,7 +3,10 @@ import { z } from 'zod';
 const fields = {
   companyName: z.string().trim().min(1),
   jobTitle: z.string().trim().min(1),
-  jobUrl: z.url().nullable().optional(),
+  jobUrl: z
+    .url({ protocol: /^https?$/, message: 'Enter a valid https link.' })
+    .nullable()
+    .optional(),
   status: z
     .enum(['SAVED', 'APPLIED', 'INTERVIEW_SCHEDULED', 'OFFER', 'REJECTED'])
     .optional(),
