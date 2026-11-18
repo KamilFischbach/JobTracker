@@ -34,7 +34,7 @@ The public demo uses fictional sample data stored in the visitor's browser. It d
 - **Backend:**
   - **Express REST API:** REST endpoints validate application data with Zod.
   - **Accounts:** `/auth/*` handles sign-up with email confirmation, login, password reset and account deletion. Each user only sees their own applications.
-  - **AI import:** `POST /ai/parse-offer` downloads a job offer page and extracts its data with a local LLM (Ollama).
+  - **AI import:** `POST /ai/parse-offer` downloads a job offer page and extracts its data with an LLM: Groq in the cloud or a local Ollama model.
   - **Email webhook:** `POST /webhooks/email-status` receives classified recruiter emails from n8n and updates application statuses.
   - **Database:** PostgreSQL ran using Docker, accessed through Prisma.
 - **Automation (optional):** n8n (Docker) reads Gmail, classifies emails with the local LLM and calls the email webhook.
@@ -51,7 +51,7 @@ The public demo uses fictional sample data stored in the visitor's browser. It d
 - **Tailwind CSS and shadcn/ui:** Reusable personalized components.
 - **Node.js and Express:** Backend with REST API.
 - **Zod:** Runtime validation of API input and of the LLM's answers.
-- **Ollama (qwen2.5:7b):** Local LLM with JSON-schema structured output for the AI offer import.
+- **Groq (openai/gpt-oss-20b) or Ollama (qwen2.5:7b):** LLM with JSON-schema structured output for the AI offer import, hosted or local.
 - **n8n:** Workflow automation connecting Gmail, the local LLM and the JobTracker API.
 - **Prisma and PostgreSQL:** Typed database access and relational persistence.
 - **GitHub Actions and GitHub Pages:** Automated deployment of the frontend-only demo.
@@ -89,14 +89,16 @@ Paste a job offer link in the **Add application** form and click **Fill with AI*
 
 How it works:
 
-- **Runs locally:** the model runs in [Ollama](https://ollama.com) on your machine, so offer data is not sent to an external AI service and it costs nothing.
-- **Structured output:** one Zod schema describes the data. It is sent to Ollama as a JSON schema, so the model can only answer in that shape, and the same schema validates the answer. If the answer is invalid, the model gets its mistake and one more try.
+- **Two providers:** [Groq](https://groq.com) (`LLM_PROVIDER=groq`, free tier, used when hosted) or a local [Ollama](https://ollama.com) model (default in development; offer data stays on your machine). Both sit behind one small `LlmClient` interface; any OpenAI-compatible API works through the Groq client.
+- **Structured output:** one Zod schema describes the data. It is sent to the model as a JSON schema (strict mode on Groq), so the model can only answer in that shape, and the same schema validates the answer. If the answer is invalid, the model gets its mistake and one more try.
+- **Token budget:** Groq's free tier allows about 8,000 tokens per minute, so at most 8,000 characters of the offer are sent (`LLM_MAX_INPUT_CHARS`), a third of them for structured data.
+- **Daily limits** (rolling 24 hours, `AI_LIMIT_*`): 20 imports per user, 3 per address for demo accounts, 50 for all demo accounts and 500 in total, below Groq's daily request limit. Only calls that reach the model count; when the provider is down the import is given back. Addresses are stored only as an HMAC (`IP_HASH_SECRET`), IPv6 per /64 network. The form shows how many imports are left (`GET /ai/usage`).
 - **Code does the maths:** the model copies salaries as written (per hour, day, month or year). The server converts them to monthly amounts, because small models make arithmetic mistakes.
 - **The user stays in control:** nothing is saved automatically. If the model doubts the page is a single offer, the form shows a warning.
 - **Blocked sites:** some job boards (e.g. LinkedIn) block automatic downloads or load offers with JavaScript. The form then asks you to paste the offer text, and the link is still saved.
 - **Safe downloads:** the server only fetches public http(s) pages. Links to localhost or private network addresses are refused, with a 10-second timeout and a size limit.
 
-Errors have clear codes for the client: `FETCH_FAILED` and `NOT_A_JOB_OFFER` (422), `AI_INVALID_OUTPUT` (502) and `AI_UNAVAILABLE` (503, e.g. Ollama is not running).
+Errors have clear codes for the client: `FETCH_FAILED` and `NOT_A_JOB_OFFER` (422), `AI_LIMIT_REACHED` (429), `AI_INVALID_OUTPUT` (502) and `AI_UNAVAILABLE` (503, e.g. Ollama is not running or Groq is busy).
 
 **The AI import needs the local backend, so it is hidden in the GitHub Pages demo.**
 
@@ -189,11 +191,19 @@ TRUST_PROXY=0                     # number of reverse proxies in front of the AP
 
 The server checks these when it starts and refuses to run with `NODE_ENV=production` unless `APP_URL` is https and Turnstile and Resend are configured. The session cookie is `Secure`; Chrome, Edge and Firefox accept it on `http://localhost`, Safari does not.
 
-Optional AI settings in `server/.env` (these are the defaults):
+AI settings in `server/.env`. Without them the local Ollama model is used:
 
 ```env
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="qwen2.5:7b"
+LLM_PROVIDER="groq"            # or "ollama" (default)
+LLM_API_KEY="gsk_..."          # Groq API key from console.groq.com (needed for groq)
+LLM_MODEL=""                   # default: openai/gpt-oss-20b (groq), qwen2.5:7b (ollama)
+LLM_BASE_URL=""                # default: Groq's OpenAI-compatible API, or http://localhost:11434
+LLM_MAX_INPUT_CHARS=""         # default: 8000 (groq), 24000 (ollama)
+AI_LIMIT_PER_USER=20           # daily limits, see "AI import"
+AI_LIMIT_PER_DEMO_IP=3
+AI_LIMIT_DEMO_TOTAL=50
+AI_LIMIT_TOTAL=500
+IP_HASH_SECRET=""              # random, 32+ characters; required in production
 ```
 
 Without Ollama installed you can run it in Docker instead: `docker compose --profile ai up -d`, then `docker compose exec ollama ollama pull qwen2.5:7b`. A native install is faster on Windows, because it uses the GPU without extra setup.
