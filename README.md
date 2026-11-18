@@ -82,6 +82,7 @@ The work is split on purpose:
 
 How the API handles an email:
 
+- **Off by default:** the route exists only with `ENABLE_EMAIL_WEBHOOK=true`. Emails are matched against all applications in the database, whoever owns them, so enable it only when you are the only user.
 - **Security:** n8n sends a shared secret in the `X-Api-Key` header (`WEBHOOK_API_KEY`), compared in constant time.
 - **Each email once:** the Gmail message ID is unique in the database, so retries and re-reads change nothing.
 - **Matching:** company names are compared without legal suffixes and accents (`Acorn Labs Sp. z o.o.` matches `Acorn Labs`). When a company has several applications, the job title decides.
@@ -164,9 +165,16 @@ docker compose up -d
 pnpm --filter server exec prisma migrate dev --config prisma7.config.ts
 ```
 
-Optionally, load fictional demo data. It only runs on an empty database; `db:seed:reset` deletes all applications first:
+Create the demo user `demo@jobtracker.local` with fictional applications. Its password is `DEMO_USER_PASSWORD` from `server/.env`, or a random one printed once when the user is created. `db:seed` adds the data only if the demo user has none; `db:seed:reset` replaces the demo user's data and leaves other users alone:
 
 ```powershell
+pnpm --filter server db:seed
+```
+
+Every application belongs to a user. A database created before user accounts were added already has applications without an owner, and the migration stops on them. Recreate it (this deletes all local data):
+
+```powershell
+pnpm --filter server exec prisma migrate reset --config prisma7.config.ts
 pnpm --filter server db:seed
 ```
 
@@ -192,9 +200,10 @@ docker compose --profile automation up -d
 
 Open `http://localhost:5678` and, on the first visit, create the local n8n owner account.
 
-1. **API key.** Add a long random secret to `server/.env` and restart the API:
+1. **Enable the webhook.** It is off by default, because it matches emails against every user's applications and so only suits a single-user installation. Add this to `server/.env`, with a long random secret, and restart the API:
 
    ```env
+   ENABLE_EMAIL_WEBHOOK=true
    WEBHOOK_API_KEY="<random secret>"
    ```
 
