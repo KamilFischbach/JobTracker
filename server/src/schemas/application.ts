@@ -47,6 +47,16 @@ export const updateApplicationSchema = z
     message: 'Maximum salary must be at least the minimum salary',
   });
 
+/**
+ * Validated body of `POST /applications`.
+ */
+export type CreateApplicationInput = z.output<typeof createApplicationSchema>;
+
+/**
+ * Validated body of `PATCH /applications/:id`.
+ */
+export type UpdateApplicationInput = z.output<typeof updateApplicationSchema>;
+
 export const deleteApplicationsSchema = z.object({
   ids: z
     .array(z.string().trim().min(1))

@@ -6,12 +6,18 @@ import {
   InvalidLlmOutputError,
   NotAJobOfferError,
 } from '../services/ai/parse-offer.js';
+import {
+  ApplicationNotFoundError,
+  InvalidSalaryRangeError,
+} from '../services/applications/application-service.js';
 
 type ErrorClass = new (...args: never[]) => Error;
 
 // Errors that services throw on purpose, with messages written for the user,
 // and how they are answered. `code` lets the client react to specific cases.
 const KNOWN_ERRORS: { type: ErrorClass; status: number; code?: string }[] = [
+  { type: ApplicationNotFoundError, status: 404 },
+  { type: InvalidSalaryRangeError, status: 400 },
   { type: PageFetchError, status: 422, code: 'FETCH_FAILED' },
   { type: NotAJobOfferError, status: 422, code: 'NOT_A_JOB_OFFER' },
   { type: InvalidLlmOutputError, status: 502, code: 'AI_INVALID_OUTPUT' },

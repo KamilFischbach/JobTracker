@@ -41,6 +41,28 @@ describe('error handler', () => {
     });
   });
 
+  it.each([
+    ['POST', '/applications', { companyName: 'Acorn Labs' }],
+    ['PATCH', '/applications/abc', {}],
+    ['DELETE', '/applications', { ids: [] }],
+    ['POST', '/ai/parse-offer', { url: 'not a link' }],
+  ])(
+    'answers invalid input to %s %s with 400 { message, errors }',
+    async (method, path, body) => {
+      const app = createApp(failingPrisma(new Error('unused')), unusedAi);
+
+      const response = await request(app)
+        [method.toLowerCase() as 'post' | 'patch' | 'delete'](path)
+        .send(body)
+        .expect(400);
+
+      expect(response.body.message).toEqual(expect.any(String));
+      expect(response.body.errors).toEqual(
+        expect.arrayContaining([expect.objectContaining({ message: response.body.message })]),
+      );
+    },
+  );
+
   it('answers unexpected errors with 500, logs them and hides the details', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = new Error('connection to database lost');
