@@ -68,20 +68,22 @@ Each account sees only its own applications. Reading or changing someone else's 
 - **Abuse protection:** Cloudflare Turnstile CAPTCHA on sign-up and "forgot password". Rate limits per client address: failed logins (also per email), emails sent, link openings, and all API requests.
 - **CSRF:** besides `SameSite=Lax`, requests that change data are refused when the browser marks them as coming from another site (`Origin`, `Sec-Fetch-Site`).
 - **Headers:** `helmet` (HSTS, `nosniff`, CSP, frame protection), no `X-Powered-By`, 200 kB body limit.
+- **"Try the demo"** on the login page creates a temporary account per visitor with its own copy of the sample applications, so visitors never see each other's changes. It needs the CAPTCHA, is limited to 5 per address per day and 1,000 active demo accounts, ends after 24 hours (account, data and cookie), and logging out deletes it at once. Demo accounts cannot change a password or delete themselves, and have 3 AI imports per address per day.
 - **Account deletion** removes the user with all applications and logged emails. Expired sessions, links and demo accounts are deleted every hour.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /auth/signup` | `{ email, password, captchaToken }` → 202, emails a confirmation link |
 | `POST /auth/confirm-signup` | `{ token }` → 201, creates the account and logs in |
-| `POST /auth/login` / `POST /auth/logout` | Start / end a session |
+| `POST /auth/login` / `POST /auth/logout` | Start / end a session (logout deletes a demo account) |
+| `POST /auth/demo` | `{ captchaToken }` → 201, temporary demo account, logged in |
 | `GET /auth/me` | The logged-in user, or 401 |
 | `POST /auth/forgot-password` | `{ email, captchaToken }` → 202, emails a reset link |
 | `POST /auth/reset-password` | `{ token, password }` → 204, logs out everywhere |
 | `POST /auth/password` | `{ currentPassword, newPassword }` → 204, logs out other sessions |
 | `DELETE /auth/account` | `{ password }` → 204 |
 
-Error codes: `UNAUTHENTICATED` and `INVALID_CREDENTIALS` (401), `WRONG_PASSWORD`, `INVALID_LINK` and `CAPTCHA_FAILED` (400), `DEMO_ACCOUNT` and `FORBIDDEN_ORIGIN` (403), `RATE_LIMITED` (429), `EMAIL_UNAVAILABLE` (503).
+Error codes: `UNAUTHENTICATED` and `INVALID_CREDENTIALS` (401), `WRONG_PASSWORD`, `INVALID_LINK` and `CAPTCHA_FAILED` (400), `DEMO_ACCOUNT` and `FORBIDDEN_ORIGIN` (403), `RATE_LIMITED` (429), `EMAIL_UNAVAILABLE` and `DEMO_UNAVAILABLE` (503).
 
 ## AI import from a job offer link
 
@@ -239,6 +241,17 @@ pnpm start:frontend
 ```
 
 Open `http://localhost:5173` and log in as `demo@jobtracker.local`, or create an account. In development the confirmation link is printed in the API terminal.
+
+**CAPTCHA (Cloudflare Turnstile).** Off locally unless both keys are set. To try it locally, use Cloudflare's test keys, which work on `localhost` and always pass (use them as a pair; the test secret rejects real tokens):
+
+```env
+# client/.env.local
+VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+# server/.env
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+```
+
+For production, create a widget in the Cloudflare dashboard (**Turnstile → Add widget**, Managed mode, hostname = your domain; the domain does not have to use Cloudflare). The site key is public and is built into the client; the secret key goes only into the server's `.env`.
 
 Optional client settings in `client/.env.local`:
 
