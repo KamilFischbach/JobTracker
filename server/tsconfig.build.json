@@ -1,0 +1,11 @@
+{
+  // Compiles the server for `pnpm start`: src/ -> dist/.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "sourceMap": true
+  },
+  "include": ["src"]
+}

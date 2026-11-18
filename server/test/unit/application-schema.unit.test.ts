@@ -45,6 +45,31 @@ describe('application request schemas', () => {
     ).toBe(false);
   });
 
+  it('accepts only http(s) job links', () => {
+    for (const jobUrl of [
+      'https://example.com/jobs/1',
+      'http://example.com/jobs/1',
+      null,
+    ]) {
+      expect(
+        createApplicationSchema.safeParse({ ...validApplication, jobUrl })
+          .success,
+      ).toBe(true);
+    }
+
+    for (const jobUrl of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'ftp://example.com/job',
+    ]) {
+      expect(
+        createApplicationSchema.safeParse({ ...validApplication, jobUrl })
+          .success,
+      ).toBe(false);
+      expect(updateApplicationSchema.safeParse({ jobUrl }).success).toBe(false);
+    }
+  });
+
   it('allows a valid partial status update and rejects an empty update', () => {
     expect(updateApplicationSchema.safeParse({ status: 'OFFER' }).success).toBe(
       true,

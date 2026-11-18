@@ -5,7 +5,7 @@ import {
 } from '@testcontainers/postgresql';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { LlmClient } from '../../src/ai/llm.js';
+import type { LlmClient } from '../../src/services/ai/llm.js';
 import { createApp } from '../../src/app.js';
 import { PrismaClient } from '../../src/generated/prisma/client.js';
 import { applyMigrations } from './database.js';
@@ -217,5 +217,84 @@ describe('email status webhook (PostgreSQL integration)', () => {
 
     const event = await prisma.emailEvent.findFirstOrThrow();
     expect(event.applicationId).toBeNull();
+  });
+
+  describe('when the application changes while the email is processed', () => {
+    // An app whose Prisma client runs `change` right after the webhook has
+    // read the applications, i.e. between its decision and the update.
+    function appWithChangeAfterRead(change: () => Promise<unknown>) {
+      const racingPrisma = new Proxy(prisma, {
+        get(target, property) {
+          if (property === 'jobApplication') {
+            return {
+              ...target.jobApplication,
+              findMany: async (args: object) => {
+                const result = await target.jobApplication.findMany(args);
+                await change();
+                return result;
+              },
+            };
+          }
+          const value = Reflect.get(target, property);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      return createApp(racingPrisma, unusedAi, API_KEY);
+    }
+
+    it('keeps the status the user set and flags the email for review', async () => {
+      const application = await createApplication({
+        companyName: 'Acorn Labs',
+        jobTitle: 'Frontend Engineer',
+        status: 'APPLIED',
+      });
+      const racingApp = appWithChangeAfterRead(() =>
+        prisma.jobApplication.update({
+          where: { id: application.id },
+          data: { status: 'REJECTED' },
+        }),
+      );
+
+      const response = await request(racingApp)
+        .post('/webhooks/email-status')
+        .set('X-Api-Key', API_KEY)
+        .send(email())
+        .expect(201);
+
+      expect(response.body.event).toMatchObject({
+        outcome: 'NEEDS_REVIEW',
+        applicationId: application.id,
+        previousStatus: 'REJECTED',
+        newStatus: null,
+      });
+      const current = await prisma.jobApplication.findUniqueOrThrow({
+        where: { id: application.id },
+      });
+      expect(current.status).toBe('REJECTED');
+    });
+
+    it('logs the email without a link when the application was deleted', async () => {
+      const application = await createApplication({
+        companyName: 'Acorn Labs',
+        jobTitle: 'Frontend Engineer',
+        status: 'APPLIED',
+      });
+      const racingApp = appWithChangeAfterRead(() =>
+        prisma.jobApplication.delete({ where: { id: application.id } }),
+      );
+
+      const response = await request(racingApp)
+        .post('/webhooks/email-status')
+        .set('X-Api-Key', API_KEY)
+        .send(email())
+        .expect(201);
+
+      expect(response.body.event).toMatchObject({
+        outcome: 'NO_MATCH',
+        applicationId: null,
+        previousStatus: null,
+        newStatus: null,
+      });
+    });
   });
 });

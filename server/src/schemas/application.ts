@@ -3,7 +3,10 @@ import { z } from 'zod';
 const fields = {
   companyName: z.string().trim().min(1),
   jobTitle: z.string().trim().min(1),
-  jobUrl: z.url().nullable().optional(),
+  jobUrl: z
+    .url({ protocol: /^https?$/, message: 'Enter a valid http(s) link.' })
+    .nullable()
+    .optional(),
   status: z
     .enum(['SAVED', 'APPLIED', 'INTERVIEW_SCHEDULED', 'OFFER', 'REJECTED'])
     .optional(),
@@ -43,6 +46,16 @@ export const updateApplicationSchema = z
     path: ['salaryMax'],
     message: 'Maximum salary must be at least the minimum salary',
   });
+
+/**
+ * Validated body of `POST /applications`.
+ */
+export type CreateApplicationInput = z.output<typeof createApplicationSchema>;
+
+/**
+ * Validated body of `PATCH /applications/:id`.
+ */
+export type UpdateApplicationInput = z.output<typeof updateApplicationSchema>;
 
 export const deleteApplicationsSchema = z.object({
   ids: z

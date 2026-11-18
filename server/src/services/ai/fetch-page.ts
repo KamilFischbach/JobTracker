@@ -1,8 +1,21 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
+import { isIP, type LookupFunction } from 'node:net';
+import ipaddr from 'ipaddr.js';
+import { Agent, fetch, type Response } from 'undici';
 
+/**
+ * A job offer page could not be downloaded or read. The message is safe to
+ * show to the user.
+ */
 export class PageFetchError extends Error {}
 
+// Raised from inside the connection's DNS lookup, so the request error
+// handler can tell a blocked address from a network failure.
+class BlockedAddressError extends Error {}
+
+/**
+ * Content of a downloaded job offer page, trimmed to what the LLM needs.
+ */
 export type JobPage = {
   url: string;
   title: string | null;
@@ -17,60 +30,99 @@ const MAX_BYTES = 3_000_000;
 const MAX_TEXT_LENGTH = 12_000;
 const MAX_STRUCTURED_LENGTH = 6_000;
 
-function isPrivateIPv4(address: string) {
-  const [a = 0, b = 0] = address.split('.').map(Number);
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a >= 224
-  );
-}
+const LOCAL_ADDRESS_MESSAGE = 'Links to local addresses are not allowed.';
 
-function isPrivateAddress(address: string) {
-  if (isIP(address) === 4) return isPrivateIPv4(address);
+const REQUEST_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml',
+  'Accept-Language': 'pl,en;q=0.8',
+};
 
-  const normalized = address.toLowerCase();
-  const mappedIPv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
-  if (mappedIPv4) return isPrivateIPv4(mappedIPv4);
-
-  return (
-    normalized === '::' ||
-    normalized === '::1' ||
-    normalized.startsWith('fc') ||
-    normalized.startsWith('fd') ||
-    normalized.startsWith('fe80')
-  );
+/**
+ * Tells whether an IP address is an ordinary public one. IPv4-mapped IPv6
+ * in any notation (e.g. `::ffff:7f00:1`) is unwrapped first, and every
+ * reserved range is refused: loopback, private, link-local (cloud metadata),
+ * CGNAT, benchmarking, NAT64, 6to4, multicast, ...
+ *
+ * @param {string} address  IPv4 or IPv6 address, without brackets.
+ * @returns {boolean}       `false` for reserved ranges and invalid input.
+ */
+export function isPublicAddress(address: string) {
+  if (!ipaddr.isValid(address)) return false;
+  return ipaddr.process(address).range() === 'unicast';
 }
 
 // The server fetches URLs typed by the user, so it refuses addresses inside
 // the local network (localhost, router, cloud metadata endpoints, ...).
-async function assertPublicUrl(url: URL) {
+// Host names are checked in pinnedLookup, at connection time; IP literals
+// skip DNS, so they are checked here.
+function assertAllowedUrl(url: URL) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new PageFetchError('Only http and https links are supported.');
   }
 
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    throw new PageFetchError('Links to local addresses are not allowed.');
+    throw new PageFetchError(LOCAL_ADDRESS_MESSAGE);
   }
+  if (isIP(hostname) && !isPublicAddress(hostname)) {
+    throw new PageFetchError(LOCAL_ADDRESS_MESSAGE);
+  }
+}
 
-  let addresses: { address: string }[];
-  try {
-    addresses = isIP(hostname)
-      ? [{ address: hostname }]
-      : await lookup(hostname, { all: true });
-  } catch {
-    throw new PageFetchError(`Could not find the website ${url.hostname}.`);
-  }
+// DNS lookup used by the socket itself. The addresses it checks are the ones
+// the connection uses, so a domain cannot pass a check with a public IP and
+// then resolve to 127.0.0.1 for the download (DNS rebinding).
+const pinnedLookup: LookupFunction = (hostname, options, callback) => {
+  dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
+    if (error) return callback(error, '');
 
-  if (addresses.some(({ address }) => isPrivateAddress(address))) {
-    throw new PageFetchError('Links to local addresses are not allowed.');
+    const list = addresses as LookupAddress[];
+    const first = list[0];
+    if (!first || list.some(({ address }) => !isPublicAddress(address))) {
+      return callback(new BlockedAddressError(LOCAL_ADDRESS_MESSAGE), '');
+    }
+
+    if (options.all) return callback(null, list);
+    return callback(null, first.address, first.family);
+  });
+};
+
+// Node's built-in fetch cannot take a custom DNS lookup; undici's Agent can.
+const dispatcher = new Agent({ connect: { lookup: pinnedLookup } });
+
+function findCause<T>(
+  error: unknown,
+  match: (cause: unknown) => cause is T,
+): T | undefined {
+  for (let current = error; current; current = (current as Error).cause) {
+    if (match(current)) return current;
+    if (typeof current !== 'object') break;
   }
+  return undefined;
+}
+
+function toPageFetchError(error: unknown, url: URL, signal: AbortSignal) {
+  if (findCause(error, (e) => e instanceof BlockedAddressError)) {
+    return new PageFetchError(LOCAL_ADDRESS_MESSAGE);
+  }
+  const dnsFailure = findCause(
+    error,
+    (e): e is NodeJS.ErrnoException =>
+      e instanceof Error &&
+      ['ENOTFOUND', 'EAI_AGAIN', 'ENODATA'].includes(
+        (e as NodeJS.ErrnoException).code ?? '',
+      ),
+  );
+  if (dnsFailure) {
+    return new PageFetchError(`Could not find the website ${url.hostname}.`);
+  }
+  return new PageFetchError(
+    signal.aborted
+      ? 'The website took too long to respond.'
+      : 'Could not connect to the website.',
+  );
 }
 
 async function readLimitedBody(response: Response) {
@@ -94,41 +146,44 @@ async function readLimitedBody(response: Response) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/**
+ * Downloads a job offer page and extracts its title, JSON-LD and text.
+ * Follows redirects, and refuses links that lead to local or private network
+ * addresses, also when a host name resolves to one.
+ *
+ * @param {string} rawUrl       Link typed by the user.
+ * @returns {Promise<JobPage>}  The page content, ready for the LLM.
+ * @throws {PageFetchError}     When the page cannot be downloaded or read.
+ */
 export async function fetchJobPage(rawUrl: string): Promise<JobPage> {
   let url = new URL(rawUrl);
   const signal = AbortSignal.timeout(TIMEOUT_MS);
 
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-    await assertPublicUrl(url);
+    assertAllowedUrl(url);
 
     let response: Response;
     try {
       response = await fetch(url, {
+        dispatcher,
         redirect: 'manual',
         signal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-          'Accept-Language': 'pl,en;q=0.8',
-        },
+        headers: REQUEST_HEADERS,
       });
     } catch (error) {
-      const timedOut = error instanceof Error && error.name === 'TimeoutError';
-      throw new PageFetchError(
-        timedOut
-          ? 'The website took too long to respond.'
-          : 'Could not connect to the website.',
-      );
+      throw toPageFetchError(error, url, signal);
     }
 
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) {
+      // Release the connection before following the redirect.
+      await response.body?.cancel();
       url = new URL(location, url);
       continue;
     }
 
     if (!response.ok) {
+      await response.body?.cancel();
       throw new PageFetchError(
         `The website refused the request (HTTP ${response.status}).`,
       );
@@ -136,10 +191,18 @@ export async function fetchJobPage(rawUrl: string): Promise<JobPage> {
 
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType && !/html|text\/plain/i.test(contentType)) {
+      await response.body?.cancel();
       throw new PageFetchError('The link does not point to a web page.');
     }
 
-    const page = extractPageContent(await readLimitedBody(response));
+    let html: string;
+    try {
+      html = await readLimitedBody(response);
+    } catch (error) {
+      throw toPageFetchError(error, url, signal);
+    }
+
+    const page = extractPageContent(html);
     if (!page.structuredData && page.text.length < 200) {
       throw new PageFetchError(
         'The page has too little text to read an offer from. If it loads the offer with JavaScript, paste the offer text instead.',
@@ -262,6 +325,13 @@ function extractStructuredData(html: string) {
   return null;
 }
 
+/**
+ * Pulls the parts the LLM needs out of raw HTML: the page title, the
+ * JSON-LD `JobPosting` (if any) and the visible text, each length-limited.
+ *
+ * @param {string} html  Raw page HTML.
+ * @returns {Omit<JobPage, 'url'>}  Title, structured data and text.
+ */
 export function extractPageContent(html: string) {
   const ogTitle = html.match(
     /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i,
