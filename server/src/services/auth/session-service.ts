@@ -1,5 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
 import type { PrismaClient } from '../../generated/prisma/client.js';
+import { hashToken, newToken } from './tokens.js';
 
 /**
  * How long a session stays valid after it is created.
@@ -14,11 +14,6 @@ export type AuthUser = {
   email: string | null;
   isDemo: boolean;
 };
-
-// The cookie carries the token; the database only stores its hash.
-function hashToken(token: string) {
-  return createHash('sha256').update(token).digest('hex');
-}
 
 /**
  * Creates the service that issues and checks login sessions.
@@ -40,7 +35,7 @@ export function createSessionService(
      *   `token` goes into the cookie and is not stored anywhere else.
      */
     async create(userId: string) {
-      const token = randomBytes(32).toString('base64url');
+      const token = newToken();
       const expiresAt = new Date(now().getTime() + SESSION_DURATION_MS);
       await prisma.session.create({
         data: { id: hashToken(token), userId, expiresAt },
@@ -83,6 +78,21 @@ export function createSessionService(
      */
     async invalidate(token: string) {
       await prisma.session.deleteMany({ where: { id: hashToken(token) } });
+    },
+
+    /**
+     * Ends all of a user's sessions, e.g. after a password change.
+     *
+     * @param {string} userId     Owner of the sessions.
+     * @param {string} keepToken  Session to keep (the one making the change).
+     */
+    async invalidateAll(userId: string, keepToken?: string) {
+      await prisma.session.deleteMany({
+        where: {
+          userId,
+          ...(keepToken ? { id: { not: hashToken(keepToken) } } : {}),
+        },
+      });
     },
   };
 }
