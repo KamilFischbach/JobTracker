@@ -7,6 +7,7 @@ A personal job-application tracker for organizing a job search in one place. App
 - [Demo](#demo)
 - [Architecture](#architecture)
 - [Techstack](#techstack)
+- [Accounts and security](#accounts-and-security)
 - [AI import from a job offer link](#ai-import-from-a-job-offer-link)
 - [Email automation with n8n](#email-automation-with-n8n)
 - [Testing](#testing)
@@ -32,6 +33,7 @@ The public demo uses fictional sample data stored in the visitor's browser. It d
   - **Data layer:** TanStack Query manages API requests and cache updates. Zustand stores demo data in browser localStorage.
 - **Backend:**
   - **Express REST API:** REST endpoints validate application data with Zod.
+  - **Accounts:** `/auth/*` handles sign-up with email confirmation, login, password reset and account deletion. Each user only sees their own applications.
   - **AI import:** `POST /ai/parse-offer` downloads a job offer page and extracts its data with a local LLM (Ollama).
   - **Email webhook:** `POST /webhooks/email-status` receives classified recruiter emails from n8n and updates application statuses.
   - **Database:** PostgreSQL ran using Docker, accessed through Prisma.
@@ -53,6 +55,33 @@ The public demo uses fictional sample data stored in the visitor's browser. It d
 - **n8n:** Workflow automation connecting Gmail, the local LLM and the JobTracker API.
 - **Prisma and PostgreSQL:** Typed database access and relational persistence.
 - **GitHub Actions and GitHub Pages:** Automated deployment of the frontend-only demo.
+
+## Accounts and security
+
+Each account sees only its own applications. Reading or changing someone else's application answers **404**, as if it did not exist.
+
+- **Sessions, not tokens in the browser:** login creates a session row in PostgreSQL and an `HttpOnly`, `Secure`, `SameSite=Lax` cookie named `__Host-session`. Scripts cannot read it, and the database stores only a SHA-256 hash of the token. Sessions last 30 days, and logging out, resetting or changing the password ends them.
+- **Passwords:** Argon2id with OWASP's parameters, 12–128 characters, common passwords refused. No rules about digits or symbols (NIST guidance).
+- **Sign-up with email confirmation:** the account is created only when the emailed link is opened. Until then the email and password hash wait in a single-use token, so nobody can register someone else's address first and choose its password.
+- **No account enumeration:** sign-up and "forgot password" give the same answer for every address. The email itself says whether the address already has an account. Login gives one message for a wrong password and an unknown address, and takes as long either way.
+- **Email links** are single-use, stored hashed, and expire (sign-up 24 hours, reset 30 minutes). The token is in the URL fragment (`#token=`), so it is not sent to the server in page requests or leaked through the `Referer` header.
+- **Abuse protection:** Cloudflare Turnstile CAPTCHA on sign-up and "forgot password". Rate limits per client address: failed logins (also per email), emails sent, link openings, and all API requests.
+- **CSRF:** besides `SameSite=Lax`, requests that change data are refused when the browser marks them as coming from another site (`Origin`, `Sec-Fetch-Site`).
+- **Headers:** `helmet` (HSTS, `nosniff`, CSP, frame protection), no `X-Powered-By`, 200 kB body limit.
+- **Account deletion** removes the user with all applications and logged emails. Expired sessions, links and demo accounts are deleted every hour.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /auth/signup` | `{ email, password, captchaToken }` → 202, emails a confirmation link |
+| `POST /auth/confirm-signup` | `{ token }` → 201, creates the account and logs in |
+| `POST /auth/login` / `POST /auth/logout` | Start / end a session |
+| `GET /auth/me` | The logged-in user, or 401 |
+| `POST /auth/forgot-password` | `{ email, captchaToken }` → 202, emails a reset link |
+| `POST /auth/reset-password` | `{ token, password }` → 204, logs out everywhere |
+| `POST /auth/password` | `{ currentPassword, newPassword }` → 204, logs out other sessions |
+| `DELETE /auth/account` | `{ password }` → 204 |
+
+Error codes: `UNAUTHENTICATED` and `INVALID_CREDENTIALS` (401), `WRONG_PASSWORD`, `INVALID_LINK` and `CAPTCHA_FAILED` (400), `DEMO_ACCOUNT` and `FORBIDDEN_ORIGIN` (403), `RATE_LIMITED` (429), `EMAIL_UNAVAILABLE` (503).
 
 ## AI import from a job offer link
 
@@ -148,6 +177,17 @@ Create `server/.env` with the same password in the database URL:
 ```env
 DATABASE_URL="postgresql://jobtracker_user:local_jobtracker_password@localhost:5432/jobtracker?schema=public"
 ```
+
+In development, emails are printed in the API terminal (open the link from there) and the CAPTCHA is off. Optional settings in `server/.env`:
+
+```env
+APP_URL="http://localhost:5173"   # base of email links and the allowed Origin
+TURNSTILE_SECRET_KEY=""           # unset: CAPTCHA off (required in production)
+EMAIL_PROVIDER="console"          # or "resend" with RESEND_API_KEY and EMAIL_FROM (required in production)
+TRUST_PROXY=0                     # number of reverse proxies in front of the API
+```
+
+The server checks these when it starts and refuses to run with `NODE_ENV=production` unless `APP_URL` is https and Turnstile and Resend are configured. The session cookie is `Secure`; Chrome, Edge and Firefox accept it on `http://localhost`, Safari does not.
 
 Optional AI settings in `server/.env` (these are the defaults):
 
