@@ -30,6 +30,17 @@ export class UnauthenticatedError extends Error {
 }
 
 /**
+ * The session token from the request's cookie, if any.
+ *
+ * @param {Request} request  Incoming request (after `cookie-parser`).
+ * @returns {string | undefined} The token.
+ */
+export function sessionToken(request: Request): string | undefined {
+  const token: unknown = request.cookies?.[SESSION_COOKIE];
+  return typeof token === 'string' && token ? token : undefined;
+}
+
+/**
  * Lets a request through only with a valid session cookie and stores the
  * user on the request. Needs `cookie-parser` before it.
  *
@@ -39,11 +50,8 @@ export class UnauthenticatedError extends Error {
  */
 export function requireAuth(sessions: SessionService): RequestHandler {
   return async (request, _response, next) => {
-    const token: unknown = request.cookies?.[SESSION_COOKIE];
-    const user =
-      typeof token === 'string' && token
-        ? await sessions.validate(token)
-        : null;
+    const token = sessionToken(request);
+    const user = token ? await sessions.validate(token) : null;
     if (!user) throw new UnauthenticatedError();
     request.user = user;
     next();

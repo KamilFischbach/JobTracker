@@ -136,3 +136,28 @@ describe('Ollama client', () => {
     ).rejects.toBeInstanceOf(LlmUnavailableError);
   });
 });
+
+describe('security headers', () => {
+  it('sends helmet headers and hides the framework', async () => {
+    const app = createApp({ prisma: failingPrisma(new Error('unused')), sessions: fakeSessions(), ai: unusedAi });
+
+    const response = await request(app).get('/health').expect(200);
+
+    expect(response.body).toEqual({ status: 'ok' });
+    expect(response.headers['x-powered-by']).toBeUndefined();
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['strict-transport-security']).toMatch(/max-age=/);
+    expect(response.headers['content-security-policy']).toContain("default-src 'self'");
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+  });
+
+  it('rejects request bodies over 200 kB with 413', async () => {
+    const app = createApp({ prisma: failingPrisma(new Error('unused')), sessions: fakeSessions(), ai: unusedAi });
+
+    await request(app)
+      .post('/applications')
+      .set('Cookie', SIGNED_IN_COOKIE)
+      .send({ notes: 'x'.repeat(210_000) })
+      .expect(413);
+  });
+});

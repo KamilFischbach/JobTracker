@@ -28,6 +28,7 @@ model User {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   sessions        Session[]
+  authTokens      AuthToken[]
   applications    JobApplication[]
 
   @@index([expiresAt])
@@ -42,6 +43,31 @@ model Session {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum AuthTokenPurpose {
+  SIGNUP
+  PASSWORD_RESET
+}
+
+// A single-use link sent by email. The id is the SHA-256 hash of the token in
+// the link. SIGNUP tokens carry the requested email and password hash: the
+// User row is only created when the link is opened, so nobody can register
+// someone else's address first and set its password. PASSWORD_RESET tokens
+// belong to an existing user.
+model AuthToken {
+  id           String           @id
+  purpose      AuthTokenPurpose
+  email        String
+  passwordHash String?
+  userId       String?
+  user         User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  createdAt    DateTime         @default(now())
+
+  @@index([email])
   @@index([userId])
   @@index([expiresAt])
 }
