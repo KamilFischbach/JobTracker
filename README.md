@@ -228,7 +228,14 @@ pnpm start:backend
 pnpm start:frontend
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173` and log in as `demo@jobtracker.local`, or create an account. In development the confirmation link is printed in the API terminal.
+
+Optional client settings in `client/.env.local`:
+
+```env
+VITE_TURNSTILE_SITE_KEY=""     # Turnstile site key; unset = no CAPTCHA widget (matches the server)
+VITE_EMAIL_AUTOMATION=true     # show "Email activity" (only with ENABLE_EMAIL_WEBHOOK on the server)
+```
 
 ### Set up the email automation (optional)
 
