@@ -31,12 +31,14 @@ export function createSessionService(
      * Starts a session for the user.
      *
      * @param {string} userId  Owner of the session.
+     * @param {Date}   until   Earlier end, e.g. when a demo account expires.
      * @returns {Promise<{ token: string; expiresAt: Date }>}
      *   `token` goes into the cookie and is not stored anywhere else.
      */
-    async create(userId: string) {
+    async create(userId: string, until?: Date) {
       const token = newToken();
-      const expiresAt = new Date(now().getTime() + SESSION_DURATION_MS);
+      const fullLength = new Date(now().getTime() + SESSION_DURATION_MS);
+      const expiresAt = until && until < fullLength ? until : fullLength;
       await prisma.session.create({
         data: { id: hashToken(token), userId, expiresAt },
       });

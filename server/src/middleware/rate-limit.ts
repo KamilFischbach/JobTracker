@@ -45,7 +45,7 @@ function loginEmailKey(request: Request) {
  * @returns {object}  Limiters: `api` (every route), `login` (failed logins,
  *   per address and per email), `sendsEmail` (sign-up / forgot password),
  *   `links` (opening email links), `account` (password checks of a
- *   logged-in user) and `ai` (offer imports).
+ *   logged-in user), `ai` (offer imports) and `demo` (new demo accounts).
  */
 export function createRateLimits(enabled = true) {
   if (!enabled) {
@@ -56,6 +56,7 @@ export function createRateLimits(enabled = true) {
       links: skipAll,
       account: skipAll,
       ai: skipAll,
+      demo: skipAll,
     };
   }
   return {
@@ -75,6 +76,8 @@ export function createRateLimits(enabled = true) {
     account: limiter({ windowMs: 15 * MINUTE, limit: 10, skipSuccessfulRequests: true }),
     // Each import downloads a page; the daily AI limits are counted separately.
     ai: limiter({ windowMs: MINUTE, limit: 10 }),
+    // New demo accounts per address.
+    demo: limiter({ windowMs: 24 * 60 * MINUTE, limit: 5 }),
   };
 }
 

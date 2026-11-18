@@ -6,6 +6,7 @@ import type {
   ResetPasswordInput,
   SignupInput,
 } from '../../schemas/auth.js';
+import { buildDemoData } from '../demo/demo-data.js';
 import {
   accountExistsEmail,
   noAccountEmail,
@@ -21,6 +22,15 @@ import { hashToken, newToken } from './tokens.js';
 
 const SIGNUP_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_LINK_TTL_MS = 30 * 60 * 1000;
+
+/** How long a "Try demo" account and its data live. */
+export const DEMO_ACCOUNT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Most demo accounts that may exist at once, so a flood of visitors cannot
+ * fill the database (each account copies the demo applications).
+ */
+export const MAX_ACTIVE_DEMO_ACCOUNTS = 1000;
 
 /**
  * Wrong email or password at login. The message does not say which.
@@ -62,6 +72,15 @@ export class InvalidLinkError extends Error {
 export class DemoAccountError extends Error {
   constructor() {
     super('Demo accounts cannot do this. Create a free account to use it.');
+  }
+}
+
+/**
+ * Too many demo accounts exist right now. Answered with 503.
+ */
+export class DemoUnavailableError extends Error {
+  constructor() {
+    super('The demo is very busy right now. Try again later or create a free account.');
   }
 }
 
@@ -242,12 +261,53 @@ export function createAuthService({
     },
 
     /**
-     * Ends the session. Unknown tokens are ignored.
+     * Creates a temporary demo account with a copy of the demo applications
+     * and logs it in. Account, data and session end after 24 hours.
+     *
+     * @param {string | undefined} captchaToken   CAPTCHA answer.
+     * @param {string | undefined} ip             Client address, for the CAPTCHA check.
+     * @param {string | undefined} previousToken  Session cookie the browser still had; ended.
+     * @returns {Promise<LoginResult>}
+     * @throws {CaptchaFailedError | DemoUnavailableError}
+     */
+    async startDemo(
+      captchaToken: string | undefined,
+      ip: string | undefined,
+      previousToken?: string,
+    ): Promise<LoginResult> {
+      await captcha.verify(captchaToken, ip);
+
+      const active = await prisma.user.count({
+        where: { isDemo: true, expiresAt: { gt: now() } },
+      });
+      if (active >= MAX_ACTIVE_DEMO_ACCOUNTS) throw new DemoUnavailableError();
+
+      const expiresAt = expiresIn(DEMO_ACCOUNT_TTL_MS);
+      const user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({ data: { isDemo: true, expiresAt } });
+        const { applications, emailEvents } = buildDemoData(created.id);
+        await tx.jobApplication.createMany({ data: applications });
+        await tx.emailEvent.createMany({ data: emailEvents });
+        return created;
+      });
+
+      if (previousToken) await sessions.invalidate(previousToken);
+      return {
+        user: toAuthUser(user),
+        session: await sessions.create(user.id, expiresAt),
+      };
+    },
+
+    /**
+     * Ends the session. A demo account is deleted with its data right away,
+     * since nobody can log back into it. Unknown tokens are ignored.
      *
      * @param {string} token  Session cookie.
      */
-    logout(token: string) {
-      return sessions.invalidate(token);
+    async logout(token: string) {
+      const user = await sessions.validate(token);
+      await sessions.invalidate(token);
+      if (user?.isDemo) await deleteUsers(prisma, { id: user.id, isDemo: true });
     },
 
     /**

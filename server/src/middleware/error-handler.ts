@@ -2,6 +2,7 @@ import type { ErrorRequestHandler } from 'express';
 import { InvalidInputError } from '../routes/validation.js';
 import {
   DemoAccountError,
+  DemoUnavailableError,
   InvalidCredentialsError,
   InvalidLinkError,
   WrongPasswordError,
@@ -34,6 +35,7 @@ const KNOWN_ERRORS: { type: ErrorClass; status: number; code?: string }[] = [
   { type: InvalidLinkError, status: 400, code: 'INVALID_LINK' },
   { type: CaptchaFailedError, status: 400, code: 'CAPTCHA_FAILED' },
   { type: DemoAccountError, status: 403, code: 'DEMO_ACCOUNT' },
+  { type: DemoUnavailableError, status: 503, code: 'DEMO_UNAVAILABLE' },
   { type: ForbiddenOriginError, status: 403, code: 'FORBIDDEN_ORIGIN' },
   { type: RateLimitedError, status: 429, code: 'RATE_LIMITED' },
   { type: EmailDeliveryError, status: 503, code: 'EMAIL_UNAVAILABLE' },

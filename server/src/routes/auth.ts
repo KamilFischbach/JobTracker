@@ -14,6 +14,7 @@ import {
   loginSchema,
   resetPasswordSchema,
   signupSchema,
+  startDemoSchema,
 } from '../schemas/auth.js';
 import type { AuthService, LoginResult } from '../services/auth/auth-service.js';
 import type { SessionService } from '../services/auth/session-service.js';
@@ -76,6 +77,12 @@ export function createAuthRouter(
     const input = parseInput(loginSchema, request.body);
     const result = await auth.login(input, sessionToken(request));
     response.json(startSession(response, result));
+  });
+
+  router.post('/demo', limits.demo, async (request, response) => {
+    const { captchaToken } = parseInput(startDemoSchema, request.body);
+    const result = await auth.startDemo(captchaToken, request.ip, sessionToken(request));
+    response.status(201).json(startSession(response, result));
   });
 
   router.post('/logout', async (request, response) => {

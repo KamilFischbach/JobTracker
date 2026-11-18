@@ -33,7 +33,10 @@ export const SIGNED_IN_COOKIE = `${SESSION_COOKIE}=${VALID_TOKEN}`;
  */
 export function fakeSessions(user: AuthUser = TEST_USER): SessionService {
   return {
-    create: async () => ({ token: VALID_TOKEN, expiresAt: new Date() }),
+    create: async (_userId: string, until?: Date) => ({
+      token: VALID_TOKEN,
+      expiresAt: until ?? new Date(),
+    }),
     validate: async (token) => (token === VALID_TOKEN ? user : null),
     invalidate: async () => {},
     invalidateAll: async () => {},

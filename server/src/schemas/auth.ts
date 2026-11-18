@@ -79,6 +79,9 @@ export const loginSchema = z.object({ email, password: currentPassword });
 /** Body of `POST /auth/confirm-signup`. */
 export const confirmSignupSchema = z.object({ token: linkToken });
 
+/** Body of `POST /auth/demo`. */
+export const startDemoSchema = z.object({ captchaToken });
+
 /** Body of `POST /auth/forgot-password`. */
 export const forgotPasswordSchema = z.object({ email, captchaToken });
 
