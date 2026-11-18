@@ -132,6 +132,23 @@ export type OfferDraft = {
   warning: string | null;
 };
 
+/** Used and allowed "Fill with AI" imports in the last 24 hours. */
+export type AiUsage = { used: number; limit: number };
+
+/**
+ * The user's AI import allowance for today.
+ *
+ * @returns {Promise<AiUsage>}
+ * @throws {ApiError}
+ */
+export async function getAiUsage(): Promise<AiUsage> {
+  const response = await fetch('/api/ai/usage');
+  if (!response.ok) {
+    throw await toApiError(response, 'Could not load the AI allowance');
+  }
+  return response.json();
+}
+
 // Asks the backend AI to read a job offer (from the link, or from pasted text).
 export async function parseOffer(input: {
   url: string;

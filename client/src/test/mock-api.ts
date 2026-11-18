@@ -93,6 +93,7 @@ export function setMockApplications(next: JobApplicationResponse[]) {
 
 export const server = setupServer(
   ...authHandlers,
+  http.get('/api/ai/usage', () => HttpResponse.json({ used: 1, limit: 20 })),
   http.get('/api/applications', () => HttpResponse.json(applications)),
   http.get('/api/applications/:id', ({ params }) => {
     const application = applications.find((item) => item.id === params.id);

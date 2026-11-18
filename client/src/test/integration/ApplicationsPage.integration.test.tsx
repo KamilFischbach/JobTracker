@@ -221,6 +221,40 @@ describe('ApplicationsPage API integration', () => {
     });
   });
 
+  it('shows how many AI imports are left today', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /add application/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(
+      await within(dialog).findByText('AI imports left today: 19 of 20'),
+    ).toBeInTheDocument();
+  });
+
+  it('turns the AI import off when no imports are left, and shows the limit message', async () => {
+    server.use(
+      http.get('/api/ai/usage', () => HttpResponse.json({ used: 20, limit: 20 })),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /add application/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(
+      within(dialog).getByLabelText(/fill from job offer link/i),
+      'https://jobs.example.com/box',
+    );
+
+    expect(
+      await within(dialog).findByText(/No AI imports left today/),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('button', { name: /fill with ai/i }),
+    ).toBeDisabled();
+  });
+
   it('shows the API error state instead of treating a failed response as empty data', async () => {
     const { server } = await import('../mock-api');
     const { http, HttpResponse } = await import('msw');
