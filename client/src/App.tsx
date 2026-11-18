@@ -7,22 +7,53 @@ import {
 } from 'react-router-dom';
 import { ApplicationDetailsPage } from './components/ApplicationDetailsPage';
 import { ApplicationsPage } from './components/ApplicationsPage';
+import { AccountPage } from './components/auth/AccountPage';
+import { ConfirmSignupPage } from './components/auth/ConfirmSignupPage';
+import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
+import { LoginPage } from './components/auth/LoginPage';
+import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
+import { GuestOnly, RequireAuth } from './components/auth/RouteGuards';
+import { SignupPage } from './components/auth/SignupPage';
 import { Footer } from './components/Footer';
-const AppRouter =
-  import.meta.env.VITE_DEMO_MODE === 'true' ? HashRouter : BrowserRouter;
+import { isDemoMode } from './services/applications';
 
-function App() {
+const AppRouter = isDemoMode ? HashRouter : BrowserRouter;
+
+/**
+ * All pages. The GitHub Pages demo has no accounts, so it only has the board.
+ */
+export function AppRoutes() {
   return (
-    <AppRouter>
-      <Routes>
-        <Route path='/' element={<Navigate to='/applications' replace />} />
+    <Routes>
+      <Route path='/' element={<Navigate to='/applications' replace />} />
+      {!isDemoMode && (
+        <>
+          <Route element={<GuestOnly />}>
+            <Route path='/login' element={<LoginPage />} />
+            <Route path='/signup' element={<SignupPage />} />
+            <Route path='/forgot-password' element={<ForgotPasswordPage />} />
+          </Route>
+          <Route path='/confirm-signup' element={<ConfirmSignupPage />} />
+          <Route path='/reset-password' element={<ResetPasswordPage />} />
+        </>
+      )}
+      <Route element={<RequireAuth />}>
         <Route path='/applications' element={<ApplicationsPage />} />
         <Route
           path='/applications/:applicationId'
           element={<ApplicationDetailsPage />}
         />
-        <Route path='*' element={<Navigate to='/' replace />} />
-      </Routes>
+        {!isDemoMode && <Route path='/account' element={<AccountPage />} />}
+      </Route>
+      <Route path='*' element={<Navigate to='/' replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <AppRouter>
+      <AppRoutes />
       <Footer />
     </AppRouter>
   );
