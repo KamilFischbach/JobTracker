@@ -1,4 +1,22 @@
 import type { ErrorRequestHandler } from 'express';
+import { InvalidInputError } from '../routes/validation.js';
+import { PageFetchError } from '../services/ai/fetch-page.js';
+import { LlmUnavailableError } from '../services/ai/llm.js';
+import {
+  InvalidLlmOutputError,
+  NotAJobOfferError,
+} from '../services/ai/parse-offer.js';
+
+type ErrorClass = new (...args: never[]) => Error;
+
+// Errors that services throw on purpose, with messages written for the user,
+// and how they are answered. `code` lets the client react to specific cases.
+const KNOWN_ERRORS: { type: ErrorClass; status: number; code?: string }[] = [
+  { type: PageFetchError, status: 422, code: 'FETCH_FAILED' },
+  { type: NotAJobOfferError, status: 422, code: 'NOT_A_JOB_OFFER' },
+  { type: InvalidLlmOutputError, status: 502, code: 'AI_INVALID_OUTPUT' },
+  { type: LlmUnavailableError, status: 503, code: 'AI_UNAVAILABLE' },
+];
 
 type HttpError = Error & { status?: number; expose?: boolean; type?: string };
 
@@ -18,13 +36,15 @@ function isRecordNotFound(error: unknown) {
 }
 
 /**
- * Last middleware of the app. Turns any error a route throws into a JSON
- * `{ message }` response, so the client never gets Express's HTML error page
- * (which also contains the stack trace).
+ * Last middleware of the app: turns every error into a JSON response, so
+ * routes only delegate to services and never build error responses.
  *
+ * - Invalid input: 400 `{ message, errors }`.
+ * - Known service errors: their status, `{ code?, message }`.
  * - Invalid request bodies (bad JSON, too large) keep their 4xx status.
- * - Prisma "record not found" (P2025) becomes 404.
- * - Anything else is logged and becomes 500 with a generic message.
+ * - Prisma "record not found" (P2025): 404.
+ * - Anything else is logged and becomes 500 with a generic message, so the
+ *   client never gets Express's HTML page with the stack trace.
  */
 export const errorHandler: ErrorRequestHandler = (
   error,
@@ -34,6 +54,20 @@ export const errorHandler: ErrorRequestHandler = (
 ) => {
   // Too late to send JSON; let Express close the connection.
   if (response.headersSent) return next(error);
+
+  if (error instanceof InvalidInputError) {
+    return response
+      .status(400)
+      .json({ message: error.message, errors: error.issues });
+  }
+
+  const known = KNOWN_ERRORS.find(({ type }) => error instanceof type);
+  if (known) {
+    return response.status(known.status).json({
+      ...(known.code ? { code: known.code } : {}),
+      message: (error as Error).message,
+    });
+  }
 
   if (isHttpError(error) && error.expose && error.status && error.status < 500) {
     const message =
