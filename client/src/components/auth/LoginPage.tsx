@@ -7,6 +7,7 @@ import { safeNextPath } from '../../lib/safe-next-path';
 import { login } from '../../services/auth';
 import { AuthLayout, FormMessage } from './AuthLayout';
 import { FormField } from './FormField';
+import { TryDemo } from './TryDemo';
 
 /**
  * `/login`. After logging in, goes to `?next=` (pages of this app only).
@@ -75,6 +76,9 @@ export function LoginPage() {
           {loginMutation.isPending ? 'Logging in...' : 'Log in'}
         </Button>
       </form>
+      <div className='mt-6'>
+        <TryDemo />
+      </div>
     </AuthLayout>
   );
 }

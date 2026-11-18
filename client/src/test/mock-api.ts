@@ -9,6 +9,11 @@ export let applications: JobApplicationResponse[] = [];
 export const MOCK_PASSWORD = 'correct horse battery';
 /** Link token the mock API accepts for sign-up and reset links. */
 export const VALID_LINK_TOKEN = 'valid-link-token';
+export const MOCK_DEMO_USER: AuthUser = {
+  id: 'demo-1',
+  email: null,
+  isDemo: true,
+};
 export const MOCK_USER: AuthUser = {
   id: 'user-1',
   email: 'kamil@example.com',
@@ -44,6 +49,10 @@ const authHandlers = [
     }
     currentUser = MOCK_USER;
     return HttpResponse.json(MOCK_USER);
+  }),
+  http.post('/api/auth/demo', () => {
+    currentUser = MOCK_DEMO_USER;
+    return HttpResponse.json(MOCK_DEMO_USER, { status: 201 });
   }),
   http.post('/api/auth/logout', () => {
     currentUser = null;

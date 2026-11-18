@@ -8,6 +8,7 @@ import { AppRoutes } from '../../App';
 import { createQueryClient } from '../../lib/query-client';
 import type { JobApplicationResponse } from '../../types/JobApplication';
 import {
+  MOCK_DEMO_USER,
   MOCK_PASSWORD,
   MOCK_USER,
   server,
@@ -126,6 +127,48 @@ describe('authentication', () => {
   it('sends logged-in users from the login page to the board', async () => {
     renderApp('/login');
     await expectBoard();
+  });
+
+  describe('trying the demo', () => {
+    beforeEach(() => setMockUser(null));
+
+    it('starts a demo account from the login page and shows the demo notice', async () => {
+      renderApp('/login');
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Try the demo' }),
+      );
+
+      await expectBoard();
+      expect(
+        screen.getByText(/Demo account: your changes are deleted after 24 hours/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /^Demo account/ })).toBeInTheDocument();
+    });
+
+    it('lets a demo user open the sign-up page', async () => {
+      setMockUser(MOCK_DEMO_USER);
+      renderApp('/applications');
+
+      await userEvent.click(
+        await screen.findByRole('link', { name: 'Create a free account' }),
+      );
+
+      expect(
+        await screen.findByRole('heading', { name: 'Create an account' }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows no password or delete options on a demo account', async () => {
+      setMockUser(MOCK_DEMO_USER);
+      renderApp('/account');
+
+      expect(
+        await screen.findByText(/This is a temporary demo account/),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change password' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Delete my account' })).toBeNull();
+    });
   });
 
   describe('signing up', () => {

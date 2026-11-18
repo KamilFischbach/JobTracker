@@ -10,6 +10,7 @@ import { getApplicationStats } from '../lib/application-stats';
 import type { JobApplicationType } from '../types/JobApplication';
 import { ApplicationFormDialog } from './ApplicationFormDialog';
 import { AccountMenu } from './auth/AccountMenu';
+import { DemoAccountNotice } from './auth/DemoAccountNotice';
 import { CountUp } from './CountUp';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -100,6 +101,7 @@ export function HeroHeader({
               Demo mode: sample data saved in this browser
             </span>
           )}
+          {!isDemoMode && <DemoAccountNotice />}
         </div>
         <div className='ml-auto flex items-center gap-2'>
           {!isDemoMode && <AccountMenu />}

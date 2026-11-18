@@ -59,12 +59,13 @@ export function RequireAuth() {
 }
 
 /**
- * Shows the nested routes (login, sign-up) only to logged-out visitors.
+ * Shows the nested routes (login, sign-up) only to logged-out visitors and
+ * to temporary demo accounts, which may sign up or log in for real.
  */
 export function GuestOnly() {
   const { data: user, isPending } = useCurrentUser();
 
   if (isPending) return <CheckingSession />;
-  if (user) return <Navigate to='/applications' replace />;
+  if (user && !user.isDemo) return <Navigate to='/applications' replace />;
   return <Outlet />;
 }

@@ -46,7 +46,18 @@ export function login(input: { email: string; password: string }) {
   return send<AuthUser>('POST', 'login', input, 'Could not log in');
 }
 
-/** Ends the session. */
+/**
+ * Starts a temporary demo account with sample applications (24 hours).
+ *
+ * @param {string | undefined} captchaToken  CAPTCHA answer.
+ * @returns {Promise<AuthUser>} The demo user.
+ * @throws {ApiError} `CAPTCHA_FAILED`, `RATE_LIMITED`, `DEMO_UNAVAILABLE`.
+ */
+export function startDemo(captchaToken?: string) {
+  return send<AuthUser>('POST', 'demo', { captchaToken }, 'Could not start the demo');
+}
+
+/** Ends the session (a demo account is deleted). */
 export function logout() {
   return send('POST', 'logout', undefined, 'Could not log out');
 }
