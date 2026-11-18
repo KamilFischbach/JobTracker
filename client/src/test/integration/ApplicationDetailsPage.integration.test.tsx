@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationDetailsPage } from '../../components/ApplicationDetailsPage';
 import type { EmailEvent } from '../../types/EmailEvent';
 import { server, setMockApplications } from '../mock-api';
@@ -41,6 +41,8 @@ const interviewEmail: EmailEvent = {
 
 describe('ApplicationDetailsPage email activity', () => {
   beforeEach(() => {
+    // Email activity only shows when the automation is enabled.
+    vi.stubEnv('VITE_EMAIL_AUTOMATION', 'true');
     setMockApplications([
       {
         id: 'app-1',
@@ -57,7 +59,10 @@ describe('ApplicationDetailsPage email activity', () => {
     ]);
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
 
   it('shows emails the automation linked, with the AI decision and status change', async () => {
     server.use(

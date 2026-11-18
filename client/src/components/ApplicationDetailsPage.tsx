@@ -8,7 +8,11 @@ import {
 } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getApplication, isDemoMode } from '../services/applications';
+import {
+  getApplication,
+  isDemoMode,
+  isEmailAutomationEnabled,
+} from '../services/applications';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 import { EmailActivity } from './EmailActivity';
 
@@ -144,7 +148,7 @@ export function ApplicationDetailsPage() {
       )}
 
       {/* The email automation needs the backend, so the demo hides it. */}
-      {query.data && !isDemoMode && (
+      {query.data && !isDemoMode && isEmailAutomationEnabled() && (
         <EmailActivity applicationId={query.data.id} />
       )}
     </main>

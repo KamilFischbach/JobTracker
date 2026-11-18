@@ -4,11 +4,8 @@ import { Label } from '@/components/ui/label';
 import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, Loader2, Sparkles, TriangleAlert } from 'lucide-react';
 import { type KeyboardEvent, useState } from 'react';
-import {
-  type OfferDraft,
-  OfferImportError,
-  parseOffer,
-} from '../services/applications';
+import { ApiError } from '../services/api-error';
+import { type OfferDraft, parseOffer } from '../services/applications';
 
 type OfferImportProps = {
   onImported: (draft: OfferDraft) => void;
@@ -24,7 +21,7 @@ export function OfferImport({ onImported }: OfferImportProps) {
     onSuccess: (draft) => onImported(draft),
     onError: (error) => {
       // The site blocked the download: let the user paste the offer instead.
-      if (error instanceof OfferImportError && error.code === 'FETCH_FAILED') {
+      if (error instanceof ApiError && error.code === 'FETCH_FAILED') {
         setShowPasteBox(true);
       }
     },
