@@ -14,6 +14,7 @@ import {
   createConsoleEmailSender,
   createResendEmailSender,
 } from './services/auth/email-sender.js';
+import { ensureInitialUser } from './services/auth/initial-user.js';
 
 const config = loadConfig();
 const { llm } = config;
@@ -70,6 +71,31 @@ async function cleanUp() {
 void cleanUp();
 setInterval(cleanUp, 60 * 60 * 1000).unref();
 
-app.listen(config.PORT, () => {
+if (config.initialUser) {
+  const result = await ensureInitialUser(prisma, config.initialUser);
+  console.log(
+    result === 'created'
+      ? `Created the account ${config.initialUser.email} (INITIAL_USER_EMAIL).`
+      : `The account ${config.initialUser.email} already exists; its password was not changed.`,
+  );
+}
+
+const server = app.listen(config.PORT, () => {
   console.log(`Server listening on port ${config.PORT}`);
 });
+
+// Graceful shutdown (docker stop sends SIGTERM): finish open requests, then
+// close the database pool. Forced exit if that takes longer than 10 s.
+function shutDown(signal: string) {
+  console.log(`${signal} received, shutting down.`);
+  setTimeout(() => process.exit(1), 10_000).unref();
+  server.close(() => {
+    prisma
+      .$disconnect()
+      .catch((error: unknown) => console.error('Closing the database failed:', error))
+      .finally(() => process.exit(0));
+  });
+  server.closeIdleConnections();
+}
+process.once('SIGTERM', () => shutDown('SIGTERM'));
+process.once('SIGINT', () => shutDown('SIGINT'));

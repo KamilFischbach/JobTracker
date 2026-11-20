@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { emailSchema, newPasswordSchema } from './schemas/auth.js';
 
 // Empty values in .env (`KEY=`) mean "not set".
 const optional = z.preprocess(
@@ -42,6 +43,8 @@ const envSchema = z
     AI_LIMIT_DEMO_TOTAL: limit(50),
     AI_LIMIT_TOTAL: limit(500),
     IP_HASH_SECRET: optional,
+    INITIAL_USER_EMAIL: optional.pipe(emailSchema.optional()),
+    INITIAL_USER_PASSWORD: optional.pipe(newPasswordSchema.optional()),
   })
   .superRefine((env, context) => {
     const require = (ok: boolean, path: string, message: string) => {
@@ -53,6 +56,10 @@ const envSchema = z
     }
     if (env.LLM_PROVIDER === 'groq') {
       require(!!env.LLM_API_KEY, 'LLM_API_KEY', 'needed for LLM_PROVIDER=groq');
+    }
+    if (!!env.INITIAL_USER_EMAIL !== !!env.INITIAL_USER_PASSWORD) {
+      const missing = env.INITIAL_USER_EMAIL ? 'INITIAL_USER_PASSWORD' : 'INITIAL_USER_EMAIL';
+      require(false, missing, 'set both INITIAL_USER_EMAIL and INITIAL_USER_PASSWORD, or neither');
     }
     if (env.NODE_ENV === 'production') {
       require(
@@ -83,12 +90,16 @@ const envSchema = z
         total: env.AI_LIMIT_TOTAL,
       },
       ipHashSecret: env.IP_HASH_SECRET ?? 'development-only',
+      initialUser:
+        env.INITIAL_USER_EMAIL && env.INITIAL_USER_PASSWORD
+          ? { email: env.INITIAL_USER_EMAIL, password: env.INITIAL_USER_PASSWORD }
+          : undefined,
     };
   });
 
 /**
  * Server settings read from environment variables, plus the derived `llm`,
- * `aiLimits` and `ipHashSecret` settings.
+ * `aiLimits`, `ipHashSecret` and `initialUser` settings.
  */
 export type Config = z.output<typeof envSchema>;
 

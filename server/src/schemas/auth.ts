@@ -31,7 +31,8 @@ const COMMON_PASSWORDS = new Set([
   'jobtracker123',
 ]);
 
-const email = z
+/** An email address, trimmed and lower-cased. */
+export const emailSchema = z
   .string('Enter your email address.')
   .trim()
   .toLowerCase()
@@ -65,6 +66,8 @@ const currentPassword = z
 const captchaToken = z.string().max(4096).optional();
 
 const linkToken = z.string('The link is invalid.').min(1).max(200);
+
+const email = emailSchema;
 
 /** Body of `POST /auth/signup`. */
 export const signupSchema = z.object({

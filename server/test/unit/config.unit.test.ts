@@ -83,3 +83,34 @@ describe('LLM settings', () => {
     ).toEqual({ perUser: 5, perDemoIp: 1, demoTotal: 50, total: 500 });
   });
 });
+
+describe('initial account', () => {
+  const password = 'a-strong-start-password';
+
+  it('is off by default', () => {
+    expect(loadConfig({}).initialUser).toBeUndefined();
+  });
+
+  it('reads the email (lower-cased) and password', () => {
+    expect(
+      loadConfig({ INITIAL_USER_EMAIL: ' Me@Example.com ', INITIAL_USER_PASSWORD: password })
+        .initialUser,
+    ).toEqual({ email: 'me@example.com', password });
+  });
+
+  it.each([
+    ['INITIAL_USER_PASSWORD', { INITIAL_USER_EMAIL: 'me@example.com' }],
+    ['INITIAL_USER_EMAIL', { INITIAL_USER_PASSWORD: password }],
+  ])('needs %s when only the other one is set', (name, env) => {
+    expect(() => loadConfig(env)).toThrow(name);
+  });
+
+  it('applies the sign-up rules to the email and password', () => {
+    expect(() =>
+      loadConfig({ INITIAL_USER_EMAIL: 'not-an-email', INITIAL_USER_PASSWORD: password }),
+    ).toThrow('INITIAL_USER_EMAIL');
+    expect(() =>
+      loadConfig({ INITIAL_USER_EMAIL: 'me@example.com', INITIAL_USER_PASSWORD: 'short' }),
+    ).toThrow(/INITIAL_USER_PASSWORD: Use at least 12 characters/);
+  });
+});
