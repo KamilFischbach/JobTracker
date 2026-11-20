@@ -4,7 +4,9 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-const html = readFileSync(process.argv[2], 'utf8');
+// Browsers turn CRLF and lone CR into LF while parsing HTML, before hashing,
+// so a Windows checkout (CRLF) must be hashed the same way.
+const html = readFileSync(process.argv[2], 'utf8').replace(/\r\n?/g, '\n');
 const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)];
 const sources = inline.map(
   ([, body]) => `'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`,
