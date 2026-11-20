@@ -1,5 +1,18 @@
 import type { ErrorRequestHandler } from 'express';
 import { InvalidInputError } from '../routes/validation.js';
+import {
+  DemoAccountError,
+  DemoUnavailableError,
+  InvalidCredentialsError,
+  InvalidLinkError,
+  WrongPasswordError,
+} from '../services/auth/auth-service.js';
+import { CaptchaFailedError } from '../services/auth/captcha.js';
+import { EmailDeliveryError } from '../services/auth/email-sender.js';
+import { RateLimitedError } from './rate-limit.js';
+import { UnauthenticatedError } from './require-auth.js';
+import { ForbiddenOriginError } from './same-origin.js';
+import { AiLimitReachedError } from '../services/ai/ai-usage.js';
 import { PageFetchError } from '../services/ai/fetch-page.js';
 import { LlmUnavailableError } from '../services/ai/llm.js';
 import {
@@ -16,11 +29,22 @@ type ErrorClass = new (...args: never[]) => Error;
 // Errors that services throw on purpose, with messages written for the user,
 // and how they are answered. `code` lets the client react to specific cases.
 const KNOWN_ERRORS: { type: ErrorClass; status: number; code?: string }[] = [
+  { type: UnauthenticatedError, status: 401, code: 'UNAUTHENTICATED' },
+  { type: InvalidCredentialsError, status: 401, code: 'INVALID_CREDENTIALS' },
+  { type: WrongPasswordError, status: 400, code: 'WRONG_PASSWORD' },
+  { type: InvalidLinkError, status: 400, code: 'INVALID_LINK' },
+  { type: CaptchaFailedError, status: 400, code: 'CAPTCHA_FAILED' },
+  { type: DemoAccountError, status: 403, code: 'DEMO_ACCOUNT' },
+  { type: DemoUnavailableError, status: 503, code: 'DEMO_UNAVAILABLE' },
+  { type: ForbiddenOriginError, status: 403, code: 'FORBIDDEN_ORIGIN' },
+  { type: RateLimitedError, status: 429, code: 'RATE_LIMITED' },
+  { type: EmailDeliveryError, status: 503, code: 'EMAIL_UNAVAILABLE' },
   { type: ApplicationNotFoundError, status: 404 },
   { type: InvalidSalaryRangeError, status: 400 },
   { type: PageFetchError, status: 422, code: 'FETCH_FAILED' },
   { type: NotAJobOfferError, status: 422, code: 'NOT_A_JOB_OFFER' },
   { type: InvalidLlmOutputError, status: 502, code: 'AI_INVALID_OUTPUT' },
+  { type: AiLimitReachedError, status: 429, code: 'AI_LIMIT_REACHED' },
   { type: LlmUnavailableError, status: 503, code: 'AI_UNAVAILABLE' },
 ];
 

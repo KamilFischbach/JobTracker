@@ -1,0 +1,14 @@
+# Keep the build context small and free of secrets.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+.git
+.github
+.vscode
+demoScreenshots
+n8n
+server/src/generated
+server/test
+client/src/test
+client/src/lib/__tests__

@@ -3,6 +3,7 @@ import {
   useDemoApplicationsStore,
 } from '../stores/demoApplicationsStore';
 import type { ApplicationStatus } from '../types/ApplicationStatus';
+import { toApiError } from './api-error';
 import type { EmailEvent } from '../types/EmailEvent';
 import type {
   JobApplicationResponse,
@@ -12,6 +13,15 @@ import type {
 export type { CreateApplicationInput };
 
 export const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
+/**
+ * Whether to show the n8n email activity. Off unless `VITE_EMAIL_AUTOMATION`
+ * is `true`, matching the server's `ENABLE_EMAIL_WEBHOOK` (single-user only).
+ * Read on each call so tests can switch it.
+ */
+export function isEmailAutomationEnabled(): boolean {
+  return import.meta.env.VITE_EMAIL_AUTOMATION === 'true';
+}
 
 function parseApplication(
   application: JobApplicationResponse,
@@ -24,26 +34,12 @@ function parseApplication(
   };
 }
 
-async function parseResponseError(response: Response, fallback: string) {
-  const text = await response.text();
-  if (!text) return new Error(`${fallback} (${response.status}).`);
-
-  try {
-    const body = JSON.parse(text) as { message?: string };
-    return new Error(body.message ?? text);
-  } catch {
-    return new Error(text);
-  }
-}
-
 export async function getApplications(): Promise<JobApplicationType[]> {
   if (isDemoMode) return useDemoApplicationsStore.getState().applications;
 
   const response = await fetch('/api/applications');
   if (!response.ok) {
-    throw new Error(
-      `Could not load applications (${response.status} ${response.statusText}).`,
-    );
+    throw await toApiError(response, 'Could not load applications');
   }
 
   const applications: JobApplicationResponse[] = await response.json();
@@ -61,7 +57,7 @@ export async function getApplication(id: string): Promise<JobApplicationType> {
 
   const response = await fetch(`/api/applications/${encodeURIComponent(id)}`);
   if (!response.ok) {
-    throw await parseResponseError(response, 'Could not load application');
+    throw await toApiError(response, 'Could not load application');
   }
 
   return parseApplication(await response.json());
@@ -82,7 +78,7 @@ export async function createApplication(
   });
 
   if (!response.ok) {
-    throw await parseResponseError(response, 'Could not create application');
+    throw await toApiError(response, 'Could not create application');
   }
 }
 
@@ -105,7 +101,7 @@ export async function updateApplicationStatus({
   });
 
   if (!response.ok) {
-    throw await parseResponseError(response, 'Could not update status');
+    throw await toApiError(response, 'Could not update status');
   }
 }
 
@@ -119,7 +115,7 @@ export async function getEmailEvents(
     `/api/applications/${encodeURIComponent(applicationId)}/email-events`,
   );
   if (!response.ok) {
-    throw await parseResponseError(response, 'Could not load email activity');
+    throw await toApiError(response, 'Could not load email activity');
   }
 
   return response.json();
@@ -136,13 +132,21 @@ export type OfferDraft = {
   warning: string | null;
 };
 
-export class OfferImportError extends Error {
-  readonly code: string | null;
+/** Used and allowed "Fill with AI" imports in the last 24 hours. */
+export type AiUsage = { used: number; limit: number };
 
-  constructor(message: string, code: string | null) {
-    super(message);
-    this.code = code;
+/**
+ * The user's AI import allowance for today.
+ *
+ * @returns {Promise<AiUsage>}
+ * @throws {ApiError}
+ */
+export async function getAiUsage(): Promise<AiUsage> {
+  const response = await fetch('/api/ai/usage');
+  if (!response.ok) {
+    throw await toApiError(response, 'Could not load the AI allowance');
   }
+  return response.json();
 }
 
 // Asks the backend AI to read a job offer (from the link, or from pasted text).
@@ -157,14 +161,7 @@ export async function parseOffer(input: {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      message?: string;
-      code?: string;
-    };
-    throw new OfferImportError(
-      body.message ?? `Could not read the offer (${response.status}).`,
-      body.code ?? null,
-    );
+    throw await toApiError(response, 'Could not read the offer');
   }
 
   return response.json();
@@ -183,6 +180,6 @@ export async function deleteApplications(ids: string[]): Promise<void> {
   });
 
   if (!response.ok) {
-    throw await parseResponseError(response, 'Could not delete applications');
+    throw await toApiError(response, 'Could not delete applications');
   }
 }

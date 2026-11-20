@@ -5,7 +5,8 @@ import type {
 } from '../../schemas/application.js';
 
 /**
- * No application has the given id. Answered with 404.
+ * The user has no application with the given id (it does not exist or
+ * belongs to someone else, which is not revealed). Answered with 404.
  */
 export class ApplicationNotFoundError extends Error {
   constructor() {
@@ -35,7 +36,8 @@ function omitUndefined<T extends object>(value: T): OmitUndefined<T> {
 }
 
 /**
- * Creates the service for the job applications on the board.
+ * Creates the service for the job applications on the board. Every function
+ * takes the id of the logged-in user and only sees that user's applications.
  *
  * @param {PrismaClient} prisma  Database client.
  * @returns {ApplicationService} The service.
@@ -44,9 +46,9 @@ export function createApplicationService(prisma: PrismaClient) {
   /**
    * @throws {ApplicationNotFoundError}
    */
-  async function get(id: string) {
-    const application = await prisma.jobApplication.findUnique({
-      where: { id },
+  async function get(userId: string, id: string) {
+    const application = await prisma.jobApplication.findFirst({
+      where: { id, userId },
     });
     if (!application) throw new ApplicationNotFoundError();
     return application;
@@ -54,24 +56,32 @@ export function createApplicationService(prisma: PrismaClient) {
 
   return {
     /** All applications, most recently applied first, unapplied last. */
-    list() {
+    list(userId: string) {
       return prisma.jobApplication.findMany({
+        where: { userId },
         orderBy: { appliedDate: { sort: 'desc', nulls: 'last' } },
       });
     },
 
     get,
 
-    /** Emails the n8n workflow linked to the application, newest first. */
-    listEmailEvents(applicationId: string) {
+    /**
+     * Emails the n8n workflow linked to the application, newest first.
+     *
+     * @throws {ApplicationNotFoundError}
+     */
+    async listEmailEvents(userId: string, applicationId: string) {
+      await get(userId, applicationId);
       return prisma.emailEvent.findMany({
         where: { applicationId },
         orderBy: { receivedAt: 'desc' },
       });
     },
 
-    create(input: CreateApplicationInput) {
-      return prisma.jobApplication.create({ data: omitUndefined(input) });
+    create(userId: string, input: CreateApplicationInput) {
+      return prisma.jobApplication.create({
+        data: { ...omitUndefined(input), userId },
+      });
     },
 
     /**
@@ -80,8 +90,8 @@ export function createApplicationService(prisma: PrismaClient) {
      *
      * @throws {ApplicationNotFoundError | InvalidSalaryRangeError}
      */
-    async update(id: string, input: UpdateApplicationInput) {
-      const existing = await get(id);
+    async update(userId: string, id: string, input: UpdateApplicationInput) {
+      const existing = await get(userId, id);
       const data = omitUndefined(input);
 
       const salaryMin = data.salaryMin === undefined ? existing.salaryMin : data.salaryMin;
@@ -94,28 +104,31 @@ export function createApplicationService(prisma: PrismaClient) {
         throw new InvalidSalaryRangeError();
       }
 
+      // `get` checked the owner; the id alone is unique.
       return prisma.jobApplication.update({ where: { id }, data });
     },
 
     /**
      * @throws {ApplicationNotFoundError}
      */
-    async remove(id: string) {
+    async remove(userId: string, id: string) {
       const { count } = await prisma.jobApplication.deleteMany({
-        where: { id },
+        where: { id, userId },
       });
       if (count === 0) throw new ApplicationNotFoundError();
     },
 
     /**
-     * Deletes the applications that exist; unknown ids are skipped.
+     * Deletes the user's applications with the given ids; unknown ids and
+     * other users' applications are skipped.
      *
-     * @param {string[]} ids    Ids to delete.
+     * @param {string}   userId  Owner of the applications.
+     * @param {string[]} ids     Ids to delete.
      * @returns {Promise<number>}  How many were deleted.
      */
-    async removeMany(ids: string[]) {
+    async removeMany(userId: string, ids: string[]) {
       const { count } = await prisma.jobApplication.deleteMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ids }, userId },
       });
       return count;
     },

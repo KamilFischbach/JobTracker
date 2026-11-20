@@ -9,6 +9,8 @@ import { motion, type Variants } from 'motion/react';
 import { getApplicationStats } from '../lib/application-stats';
 import type { JobApplicationType } from '../types/JobApplication';
 import { ApplicationFormDialog } from './ApplicationFormDialog';
+import { AccountMenu } from './auth/AccountMenu';
+import { DemoAccountNotice } from './auth/DemoAccountNotice';
 import { CountUp } from './CountUp';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -92,18 +94,23 @@ export function HeroHeader({
         <span className='hero-blob' />
       </div>
 
-      <ThemeToggle className='absolute top-4 right-4 sm:top-6 sm:right-6' />
+      <div className='mb-4 flex flex-wrap-reverse items-center justify-between gap-3'>
+        <div className='flex flex-wrap items-center gap-2'>
+          {isDemoMode && (
+            <span className='rounded-full bg-glass px-2.5 py-0.5 text-xs text-indigo-950/70 ring-1 ring-line backdrop-blur dark:text-indigo-200/80'>
+              Demo mode: sample data saved in this browser
+            </span>
+          )}
+          {!isDemoMode && <DemoAccountNotice />}
+        </div>
+        <div className='ml-auto flex items-center gap-2'>
+          {!isDemoMode && <AccountMenu />}
+          <ThemeToggle />
+        </div>
+      </div>
 
       <div className='flex flex-wrap items-end justify-between gap-6'>
         <div>
-          {/* Right padding keeps the demo pill clear of the theme switch. */}
-          <div className='flex flex-wrap items-center gap-2 pr-12'>
-            {isDemoMode && (
-              <span className='rounded-full bg-glass px-2.5 py-0.5 text-xs text-indigo-950/70 ring-1 ring-line backdrop-blur dark:text-indigo-200/80'>
-                Demo mode: sample data saved in this browser
-              </span>
-            )}
-          </div>
           <h1 className='m-0! mt-2! bg-linear-to-r from-indigo-950 via-violet-800 to-fuchsia-700 dark:from-white dark:via-indigo-200 dark:to-fuchsia-300 bg-clip-text pb-2 leading-[1.1] font-semibold! text-transparent!'>
             Applications
           </h1>

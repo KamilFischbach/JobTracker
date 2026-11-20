@@ -38,6 +38,8 @@ async function decide(
     return { outcome: 'IGNORED', ...none };
   }
 
+  // Searches every user's applications: the webhook has no notion of which
+  // user an email belongs to, so it is only enabled on single-user setups.
   const applications = await prisma.jobApplication.findMany({
     select: { id: true, companyName: true, jobTitle: true, status: true },
   });

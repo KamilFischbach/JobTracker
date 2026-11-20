@@ -1,14 +1,17 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Loader2, Sparkles, TriangleAlert } from 'lucide-react';
 import { type KeyboardEvent, useState } from 'react';
+import { ApiError } from '../services/api-error';
 import {
+  getAiUsage,
   type OfferDraft,
-  OfferImportError,
   parseOffer,
 } from '../services/applications';
+
+const aiUsageQueryKey = ['ai-usage'] as const;
 
 type OfferImportProps = {
   onImported: (draft: OfferDraft) => void;
@@ -19,12 +22,19 @@ export function OfferImport({ onImported }: OfferImportProps) {
   const [pastedText, setPastedText] = useState('');
   const [showPasteBox, setShowPasteBox] = useState(false);
 
+  const queryClient = useQueryClient();
+  const usageQuery = useQuery({ queryKey: aiUsageQueryKey, queryFn: getAiUsage });
+  const usage = usageQuery.data;
+  const remaining = usage ? Math.max(usage.limit - usage.used, 0) : null;
+
   const importMutation = useMutation({
     mutationFn: parseOffer,
     onSuccess: (draft) => onImported(draft),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: aiUsageQueryKey }),
     onError: (error) => {
       // The site blocked the download: let the user paste the offer instead.
-      if (error instanceof OfferImportError && error.code === 'FETCH_FAILED') {
+      if (error instanceof ApiError && error.code === 'FETCH_FAILED') {
         setShowPasteBox(true);
       }
     },
@@ -33,6 +43,7 @@ export function OfferImport({ onImported }: OfferImportProps) {
   const trimmedUrl = url.trim();
   const canSubmit =
     Boolean(trimmedUrl) &&
+    remaining !== 0 &&
     !importMutation.isPending &&
     (!showPasteBox || pastedText.trim().length > 0);
 
@@ -103,10 +114,16 @@ export function OfferImport({ onImported }: OfferImportProps) {
       )}
 
       <div aria-live='polite' className='text-sm'>
+        {usage && !importMutation.isPending && (
+          <p className='text-xs text-muted-foreground'>
+            {remaining === 0
+              ? 'No AI imports left today. You can still fill the form by hand.'
+              : `AI imports left today: ${remaining} of ${usage.limit}`}
+          </p>
+        )}
         {importMutation.isPending && (
           <p className='text-muted-foreground'>
-            The local AI model is reading the offer. This can take up to a
-            minute the first time.
+            The AI model is reading the offer. This can take up to a minute.
           </p>
         )}
         {importMutation.isError && (
