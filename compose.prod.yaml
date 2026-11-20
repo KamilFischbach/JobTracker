@@ -47,8 +47,6 @@ services:
       APP_URL: http://localhost:${APP_PORT:-8080}
       # One proxy (Caddy) in front: rate limits see the visitor's address.
       TRUST_PROXY: '1'
-      INITIAL_USER_EMAIL: ${INITIAL_USER_EMAIL:-}
-      INITIAL_USER_PASSWORD: ${INITIAL_USER_PASSWORD:-}
       IP_HASH_SECRET: ${IP_HASH_SECRET:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}

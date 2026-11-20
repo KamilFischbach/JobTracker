@@ -160,14 +160,14 @@ Run everything with `pnpm test`. Docker Desktop must be running for backend rout
 
 Only Docker is needed (no Node.js or pnpm). The web container (Caddy) serves the built client and forwards `/api/*` to the API; the API applies pending database migrations on every start; PostgreSQL is reachable only from the API container.
 
-1. Copy `.env.example` to `.env` in the repository root and set at least `POSTGRES_PASSWORD` (letters and digits) and, to log in straight away, `INITIAL_USER_EMAIL` and `INITIAL_USER_PASSWORD` (12+ characters). That account is created verified on the first start; later changes to these values don't change an existing account's password.
+1. Copy `.env.example` to `.env` in the repository root and set at least `POSTGRES_PASSWORD` (letters and digits).
 2. Start it:
 
    ```powershell
    docker compose -f compose.prod.yaml up -d --build      # or: pnpm start:prod
    ```
 
-3. Open <http://localhost:8080> (`APP_PORT` changes the port).
+3. Open <http://localhost:8080> (`APP_PORT` changes the port) and sign up. Without Resend the confirmation link is printed in the server log (see below); each account sees only its own applications.
 
 | Task | Command |
 |---|---|

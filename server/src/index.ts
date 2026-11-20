@@ -14,7 +14,6 @@ import {
   createConsoleEmailSender,
   createResendEmailSender,
 } from './services/auth/email-sender.js';
-import { ensureInitialUser } from './services/auth/initial-user.js';
 
 const config = loadConfig();
 const { llm } = config;
@@ -70,15 +69,6 @@ async function cleanUp() {
 }
 void cleanUp();
 setInterval(cleanUp, 60 * 60 * 1000).unref();
-
-if (config.initialUser) {
-  const result = await ensureInitialUser(prisma, config.initialUser);
-  console.log(
-    result === 'created'
-      ? `Created the account ${config.initialUser.email} (INITIAL_USER_EMAIL).`
-      : `The account ${config.initialUser.email} already exists; its password was not changed.`,
-  );
-}
 
 const server = app.listen(config.PORT, () => {
   console.log(`Server listening on port ${config.PORT}`);
