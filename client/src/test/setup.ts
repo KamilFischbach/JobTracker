@@ -1,7 +1,12 @@
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/react';
 import { MotionGlobalConfig } from 'motion/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 import { MOCK_USER, server, setMockUser } from './mock-api';
+
+// findBy*/waitFor give up after 1 s by default, too short on shared CI
+// runners for flows like log in -> redirect -> load board -> open a dialog.
+configure({ asyncUtilTimeout: 3000 });
 
 // Finish animations instantly so tests see the final UI right away.
 MotionGlobalConfig.skipAnimations = true;

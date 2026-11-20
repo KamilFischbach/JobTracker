@@ -7,6 +7,8 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
+      // Room for several 3 s findBy waits (setup.ts) on slow CI runners.
+      testTimeout: 15_000,
     },
   }),
 );
