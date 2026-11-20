@@ -1,0 +1,114 @@
+# The whole application in Docker, one command (from the repository root):
+#
+#   docker compose -f compose.prod.yaml up -d --build      (or: pnpm start:prod)
+#
+# then open http://localhost:8080. Settings come from the root .env (see
+# .env.example). Only the web container publishes a port, on 127.0.0.1.
+# Separate project name, so it never shares containers or the database volume
+# with the development stack in compose.yaml.
+name: jobtracker-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${APP_PORT:-8080}:8080'
+    depends_on:
+      server:
+        condition: service_healthy
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Development rules in config.ts: plain http on localhost, console email
+      # and Turnstile only when a key is set.
+      NODE_ENV: development
+      PORT: '3000'
+      DATABASE_URL: postgresql://jobtracker_user:${POSTGRES_PASSWORD}@db:5432/jobtracker
+      APP_URL: http://localhost:${APP_PORT:-8080}
+      # One proxy (Caddy) in front: rate limits see the visitor's address.
+      TRUST_PROXY: '1'
+      INITIAL_USER_EMAIL: ${INITIAL_USER_EMAIL:-}
+      INITIAL_USER_PASSWORD: ${INITIAL_USER_PASSWORD:-}
+      IP_HASH_SECRET: ${IP_HASH_SECRET:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      # Ollama on this machine by default; LLM_BASE_URL=http://ollama:11434
+      # with --profile ai. Groq ignores OLLAMA_BASE_URL.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MAX_INPUT_CHARS: ${LLM_MAX_INPUT_CHARS:-}
+      AI_LIMIT_PER_USER: ${AI_LIMIT_PER_USER:-}
+      AI_LIMIT_PER_DEMO_IP: ${AI_LIMIT_PER_DEMO_IP:-}
+      AI_LIMIT_DEMO_TOTAL: ${AI_LIMIT_DEMO_TOTAL:-}
+      AI_LIMIT_TOTAL: ${AI_LIMIT_TOTAL:-}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jobtracker
+      POSTGRES_USER: jobtracker_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env}
+    # No published port: only the server container can reach the database.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U jobtracker_user -d jobtracker']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # Optional local AI: docker compose -f compose.prod.yaml --profile ai up -d
+  # then: docker compose -f compose.prod.yaml exec ollama ollama pull qwen2.5:7b
+  # and set LLM_BASE_URL=http://ollama:11434 in .env.
+  ollama:
+    image: ollama/ollama:0.12.6
+    profiles: ['ai']
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    logging: *logging
+
+volumes:
+  postgres_data:
+  ollama_models:

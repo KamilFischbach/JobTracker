@@ -17,7 +17,9 @@
     "test:backend": "pnpm test:backend:unit && pnpm test:backend:integration",
     "test": "pnpm test:frontend && pnpm test:backend",
     "start:backend": "echo \"Starting server...\" && docker compose up -d && pnpm --filter server dev",
-    "start:frontend": "echo \"Starting client...\" && pnpm --filter client dev"
+    "start:frontend": "echo \"Starting client...\" && pnpm --filter client dev",
+    "start:prod": "docker compose -f compose.prod.yaml up -d --build",
+    "stop:prod": "docker compose -f compose.prod.yaml down"
   },
   "keywords": [],
   "author": "",

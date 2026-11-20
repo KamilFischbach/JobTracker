@@ -310,6 +310,9 @@ importers:
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
       undici:
         specifier: ^8.12.4
         version: 8.12.4
@@ -335,9 +338,6 @@ importers:
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
-      prisma:
-        specifier: 7.10.0
-        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
       supertest:
         specifier: ^7.3.1
         version: 7.3.1
