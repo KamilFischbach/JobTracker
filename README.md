@@ -12,6 +12,7 @@ A personal job-application tracker for organizing a job search in one place. App
 - [Email automation with n8n](#email-automation-with-n8n)
 - [Testing](#testing)
 - [How to Run Locally](#how-to-run-locally)
+  - [Run everything in Docker (one command)](#run-everything-in-docker-one-command)
   - [Requirements](#requirements)
   - [Run with the local API and PostgreSQL](#run-with-the-local-api-and-postgresql)
   - [Set up the email automation (optional)](#set-up-the-email-automation-optional)
@@ -154,6 +155,30 @@ pnpm test:backend:integration
 Run everything with `pnpm test`. Docker Desktop must be running for backend route integration tests; the other three suites do not require Docker or a local database.
 
 ## How to Run Locally
+
+### Run everything in Docker (one command)
+
+Only Docker is needed (no Node.js or pnpm). The web container (Caddy) serves the built client and forwards `/api/*` to the API; the API applies pending database migrations on every start; PostgreSQL is reachable only from the API container.
+
+1. Copy `.env.example` to `.env` in the repository root and set at least `POSTGRES_PASSWORD` (letters and digits) and, to log in straight away, `INITIAL_USER_EMAIL` and `INITIAL_USER_PASSWORD` (12+ characters). That account is created verified on the first start; later changes to these values don't change an existing account's password.
+2. Start it:
+
+   ```powershell
+   docker compose -f compose.prod.yaml up -d --build      # or: pnpm start:prod
+   ```
+
+3. Open <http://localhost:8080> (`APP_PORT` changes the port).
+
+| Task | Command |
+|---|---|
+| Logs (sign-up links are printed here unless Resend is set) | `docker compose -f compose.prod.yaml logs -f server` |
+| Stop (data is kept) | `docker compose -f compose.prod.yaml down` (or `pnpm stop:prod`) |
+| Update after `git pull` | run the start command again |
+| Delete all data | `docker compose -f compose.prod.yaml down -v` |
+
+- **AI import:** by default the API calls Ollama on your machine (`host.docker.internal:11434`). For Groq set `LLM_PROVIDER=groq` and `LLM_API_KEY`. To run Ollama in Docker too: add `--profile ai` to the start command, set `LLM_BASE_URL=http://ollama:11434`, then `docker compose -f compose.prod.yaml exec ollama ollama pull qwen2.5:7b`.
+- **Local use only:** the port is bound to `127.0.0.1` and the server runs with the development rules (plain HTTP, console email, CAPTCHA only when `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are set). The login cookie is `Secure`, which browsers accept over HTTP only on `localhost`, so opening the app from another device by IP address won't keep you logged in.
+- It uses its own Compose project (`jobtracker-prod`), so its database is separate from the development one in `compose.yaml` and both can run at the same time.
 
 ### Requirements
 
