@@ -40,6 +40,22 @@ describe('server configuration', () => {
     expect(() => loadConfig({ ...production, ...change })).toThrow(name);
   });
 
+  it('treats empty values as not set (Docker Compose passes them)', () => {
+    const empty = Object.fromEntries(
+      ['PORT', 'TRUST_PROXY', 'EMAIL_PROVIDER', 'LLM_PROVIDER', 'LLM_MAX_INPUT_CHARS',
+        'AI_LIMIT_PER_USER', 'AI_LIMIT_TOTAL', 'INITIAL_USER_EMAIL', 'INITIAL_USER_PASSWORD',
+      ].map((name) => [name, '']),
+    );
+    expect(loadConfig(empty)).toMatchObject({
+      PORT: 3000,
+      TRUST_PROXY: 0,
+      EMAIL_PROVIDER: 'console',
+      llm: { provider: 'ollama', maxInputChars: 24_000 },
+      aiLimits: { perUser: 20, total: 500 },
+      initialUser: undefined,
+    });
+  });
+
   it('lists every problem at once', () => {
     expect(() => loadConfig({ PORT: 'abc', APP_URL: 'not a url' })).toThrow(
       /PORT[\s\S]*APP_URL/,
@@ -71,6 +87,17 @@ describe('LLM settings', () => {
       apiKey: 'gsk_x',
       maxInputChars: 8_000,
     });
+  });
+
+  it('uses OLLAMA_BASE_URL only as the Ollama default', () => {
+    const url = 'http://host.docker.internal:11434';
+    expect(loadConfig({ OLLAMA_BASE_URL: url }).llm.baseUrl).toBe(url);
+    expect(
+      loadConfig({ OLLAMA_BASE_URL: url, LLM_PROVIDER: 'groq', LLM_API_KEY: 'gsk_x' }).llm.baseUrl,
+    ).toBe('https://api.groq.com/openai/v1');
+    expect(
+      loadConfig({ OLLAMA_BASE_URL: url, LLM_BASE_URL: 'http://ollama:11434' }).llm.baseUrl,
+    ).toBe('http://ollama:11434');
   });
 
   it('needs an API key for Groq', () => {

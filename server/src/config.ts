@@ -1,13 +1,16 @@
 import { z } from 'zod';
 import { emailSchema, newPasswordSchema } from './schemas/auth.js';
 
-// Empty values in .env (`KEY=`) mean "not set".
-const optional = z.preprocess(
-  (value) => (value === '' ? undefined : value),
-  z.string().trim().min(1).optional(),
-);
+// Empty values in .env (`KEY=`) mean "not set". Docker Compose passes unset
+// variables as empty strings too.
+const unsetIfEmpty = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema);
 
-const limit = (fallback: number) => z.coerce.number().int().min(0).default(fallback);
+const optional = unsetIfEmpty(z.string().trim().min(1).optional());
+
+const integer = () => z.coerce.number().int();
+
+const limit = (fallback: number) => unsetIfEmpty(integer().min(0).default(fallback));
 
 const LLM_DEFAULTS = {
   ollama: { baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', maxInputChars: 24_000 },
@@ -21,11 +24,11 @@ const envSchema = z
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
-    PORT: z.coerce.number().int().positive().default(3000),
+    PORT: unsetIfEmpty(integer().positive().default(3000)),
     APP_URL: z.url().default('http://localhost:5173'),
-    TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+    TRUST_PROXY: unsetIfEmpty(integer().min(0).default(0)),
     TURNSTILE_SECRET_KEY: optional,
-    EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
+    EMAIL_PROVIDER: unsetIfEmpty(z.enum(['console', 'resend']).default('console')),
     RESEND_API_KEY: optional,
     EMAIL_FROM: optional,
     ENABLE_EMAIL_WEBHOOK: z
@@ -33,11 +36,14 @@ const envSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     WEBHOOK_API_KEY: optional,
-    LLM_PROVIDER: z.enum(['ollama', 'groq']).default('ollama'),
+    LLM_PROVIDER: unsetIfEmpty(z.enum(['ollama', 'groq']).default('ollama')),
     LLM_BASE_URL: optional.pipe(z.url().optional()),
+    // Default Ollama address only (Docker: the host machine), unlike
+    // LLM_BASE_URL it doesn't override another provider's default.
+    OLLAMA_BASE_URL: optional.pipe(z.url().optional()),
     LLM_MODEL: optional,
     LLM_API_KEY: optional,
-    LLM_MAX_INPUT_CHARS: z.coerce.number().int().min(1000).optional(),
+    LLM_MAX_INPUT_CHARS: unsetIfEmpty(integer().min(1000).optional()),
     AI_LIMIT_PER_USER: limit(20),
     AI_LIMIT_PER_DEMO_IP: limit(3),
     AI_LIMIT_DEMO_TOTAL: limit(50),
@@ -78,7 +84,10 @@ const envSchema = z
       ...env,
       llm: {
         provider: env.LLM_PROVIDER,
-        baseUrl: env.LLM_BASE_URL ?? defaults.baseUrl,
+        baseUrl:
+          env.LLM_BASE_URL ??
+          (env.LLM_PROVIDER === 'ollama' ? env.OLLAMA_BASE_URL : undefined) ??
+          defaults.baseUrl,
         model: env.LLM_MODEL ?? defaults.model,
         apiKey: env.LLM_API_KEY,
         maxInputChars: env.LLM_MAX_INPUT_CHARS ?? defaults.maxInputChars,
