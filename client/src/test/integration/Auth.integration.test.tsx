@@ -129,6 +129,19 @@ describe('authentication', () => {
     await expectBoard();
   });
 
+  it('sends logged-in users from the login page to ?next=', async () => {
+    renderApp(`/login?next=${encodeURIComponent('/applications/app-1')}`);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Application details' }),
+    ).toBeInTheDocument();
+  });
+
+  it('never sends logged-in users from the login page to another site', async () => {
+    renderApp('/login?next=//evil.example/phish');
+    await expectBoard();
+  });
+
   describe('trying the demo', () => {
     beforeEach(() => setMockUser(null));
 

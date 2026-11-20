@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button';
 import { useQueryClient } from '@tanstack/react-query';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useSearchParams } from 'react-router-dom';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { type LoggedOut, loggedOutQueryKey } from '../../lib/query-client';
+import { safeNextPath } from '../../lib/safe-next-path';
 
 function CheckingSession() {
   return (
@@ -60,12 +61,17 @@ export function RequireAuth() {
 
 /**
  * Shows the nested routes (login, sign-up) only to logged-out visitors and
- * to temporary demo accounts, which may sign up or log in for real.
+ * to temporary demo accounts, which may sign up or log in for real. Others
+ * go to `?next=`: the same place the login page sends them, because logging
+ * in re-renders this guard and its redirect can win over the login page's.
  */
 export function GuestOnly() {
   const { data: user, isPending } = useCurrentUser();
+  const [searchParams] = useSearchParams();
 
   if (isPending) return <CheckingSession />;
-  if (user && !user.isDemo) return <Navigate to='/applications' replace />;
+  if (user && !user.isDemo) {
+    return <Navigate to={safeNextPath(searchParams.get('next'))} replace />;
+  }
   return <Outlet />;
 }
